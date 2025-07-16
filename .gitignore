@@ -39,6 +39,13 @@ build/
 .env
 .env.*
 
+# Browser context (contains sensitive session data)
+browser_context/
+
+# User data and settings
+user_contexts.json
+user_settings.json
+
 # Misc
 *.swp
 *.swo
@@ -62,3 +69,5 @@ $RECYCLE.BIN/
 
 # Other
 *.local
+user_contexts.json
+user_contexts.json
