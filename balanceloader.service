@@ -1,0 +1,15 @@
+[Unit]
+Description=Balance Loader Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=your-username
+WorkingDirectory=/opt/balanceloader
+ExecStart=/opt/balanceloader/venv/bin/python -m bot.main
+Restart=on-failure
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
