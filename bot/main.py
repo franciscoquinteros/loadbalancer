@@ -250,18 +250,20 @@ async def create_new_user_concurrent(update: Update, context: ContextTypes.DEFAU
             
             if success:
                 # Create Spanish success message that can be copied easily
-                success_message = (
-                    f"Tu usuario ha sido creado 🍀\n\n"
-                    f"———\n\n"
+                copyable_message = (
                     f"🔑Usuario: {username}\n"
                     f"🔒Contraseña: cocos\n\n"
                     f"Enlace: https://cocosbet.com\n\n"
                     f"Avisame cuando quieras cargar y te paso el CVU 💫\n\n"
                     f"❗️ VA TODO EN MINÚSCULAS, INCLUYENDO LAS PRIMERAS LETRAS ❗️\n\n"
-                    f"———"
                 )
                 
-                await update.message.reply_text(success_message)
+                # Send the message in a code block to make it easily copyable
+                await update.message.reply_text(
+                    f"Tu usuario ha sido creado 🍀\n\n"
+                    f"```\n{copyable_message}\n```", 
+                    parse_mode='Markdown'
+                )
                 
             else:
                 await update.message.reply_text(
