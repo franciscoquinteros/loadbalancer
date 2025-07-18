@@ -43,8 +43,23 @@ async def get_browser_context():
         # Create browser context directory if it doesn't exist
         BROWSER_CONTEXT_PATH.mkdir(exist_ok=True)
         
-        # Launch browser
-        _browser = await _playwright.chromium.launch(headless=True)
+        # Launch browser with optimized settings for speed
+        _browser = await _playwright.chromium.launch(
+            headless=True,
+            args=[
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-web-security',
+                '--disable-features=VizDisplayCompositor',
+                '--disable-extensions',
+                '--no-first-run',
+                '--disable-default-apps',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding'
+            ]
+        )
         
         # Try to load existing context, create new one if it doesn't exist
         context_file = BROWSER_CONTEXT_PATH / "state.json"
@@ -75,15 +90,15 @@ async def is_logged_in(page):
     """Check if we're already logged in by looking for login-specific elements"""
     try:
         # Go to the create user page and check if we're redirected to login
-        await page.goto(CREATE_USER_URL, wait_until="networkidle")
+        await page.goto(CREATE_USER_URL, wait_until="domcontentloaded")
         
-        # If we see a login form, we're not logged in
+        # Quick check for login form
         login_form = await page.query_selector('input[name="login"]')
         if login_form:
             logger.info("Not logged in - login form detected")
             return False
         
-        # If we can see user creation form elements, we're logged in
+        # Quick check for user creation form elements
         username_input = await page.query_selector('input[name="username"]')
         if username_input:
             logger.info("Already logged in - user creation form detected")
@@ -106,25 +121,30 @@ async def login_to_platform(page):
             return True
         
         logger.info("Not logged in, proceeding with login")
-        await page.goto(ADMIN_LOGIN_URL)
+        await page.goto(ADMIN_LOGIN_URL, wait_until="domcontentloaded")
         
-        # Wait for the login form to be visible
-        await page.wait_for_selector('input[name="login"]', state="visible")
-        await page.wait_for_selector('input[name="password"]', state="visible")
+        # Wait for the login form to be visible with shorter timeout
+        await page.wait_for_selector('input[name="login"]', state="visible", timeout=5000)
+        await page.wait_for_selector('input[name="password"]', state="visible", timeout=5000)
         
-        # Fill in the login form
+        # Fill in the login form quickly
         await page.fill('input[name="login"]', ADMIN_USERNAME)
         await page.fill('input[name="password"]', ADMIN_PASSWORD)
         
         # Click the login button
         await page.click('button[type="submit"]')
 
-        await page.wait_for_selector('.spinner-desktop', state="hidden")
-        # Wait a moment for form validation
-        await asyncio.sleep(2)
+        # Optimized waiting - check for spinner and wait much less
+        try:
+            await page.wait_for_selector('.spinner-desktop', state="hidden", timeout=3000)
+        except:
+            pass  # Continue even if spinner not found
         
-        # Wait for navigation to complete
-        await page.wait_for_load_state("networkidle")
+        # Reduced wait time
+        await asyncio.sleep(0.5)
+        
+        # Wait for navigation to complete with shorter timeout
+        await page.wait_for_load_state("domcontentloaded")
         
         # Save the context after successful login
         await save_browser_context()
@@ -150,18 +170,23 @@ async def create_user(username, password):
                 return False, error_msg
             
             # Navigate to the create user page
-            await page.goto(CREATE_USER_URL)
+            await page.goto(CREATE_USER_URL, wait_until="domcontentloaded")
 
-            await page.wait_for_selector('.spinner-desktop', state="hidden")
-            # Wait a moment for form validation
-            await asyncio.sleep(2)
+            # Optimized waiting
+            try:
+                await page.wait_for_selector('.spinner-desktop', state="hidden", timeout=2000)
+            except:
+                pass
             
-            # Wait for the create user form to be visible
-            await page.wait_for_selector('input[name="username"]', state="visible")
-            await page.wait_for_selector('input[name="password"]', state="visible")
-            await page.wait_for_selector('input[name="password2"]', state="visible")
+            # Reduced wait time
+            await asyncio.sleep(0.3)
             
-            # Fill in the form
+            # Wait for the create user form to be visible with shorter timeouts
+            await page.wait_for_selector('input[name="username"]', state="visible", timeout=3000)
+            await page.wait_for_selector('input[name="password"]', state="visible", timeout=3000)
+            await page.wait_for_selector('input[name="password2"]', state="visible", timeout=3000)
+            
+            # Fill in the form quickly
             await page.fill('input[name="username"]', username)
             await page.fill('input[name="password"]', password)
             await page.fill('input[name="password2"]', password)
@@ -169,16 +194,21 @@ async def create_user(username, password):
             # Submit the form
             await page.click('button[type="submit"]')    
 
-            await page.wait_for_selector('.spinner-desktop', state="hidden")
-            # Wait a moment for form validation
-            await asyncio.sleep(2)
+            # Optimized waiting
+            try:
+                await page.wait_for_selector('.spinner-desktop', state="hidden", timeout=2000)
+            except:
+                pass
             
-            # Check for error notification
+            # Reduced wait time
+            await asyncio.sleep(0.3)
+            
+            # Check for error notification with shorter timeout
             try:
                 # Wait for either error notification or success notification
                 notification = await page.wait_for_selector(
                     '.notification-desktop.notification-desktop_type_error, .notification-desktop.notification-desktop_type_success',
-                    timeout=10000
+                    timeout=3000
                 )
                 
                 if notification:
@@ -205,8 +235,8 @@ async def create_user(username, password):
                 logger.info("No notification found, checking other success indicators")
                 pass
             
-            # Wait for navigation to complete
-            await page.wait_for_load_state("networkidle")        
+            # Wait for navigation to complete with shorter timeout
+            await page.wait_for_load_state("domcontentloaded")        
             
             # Additional check: if we're still on the create user page, it might indicate an error
             current_url = page.url
@@ -247,20 +277,30 @@ async def assign_balance(username, amount):
                 logger.error(error_msg)
                 return False, error_msg
             
-            # Navigate to the create user page
-            await page.goto(BALANCE_URL)
+            # Navigate to the balance page
+            await page.goto(BALANCE_URL, wait_until="domcontentloaded")
 
-            await page.wait_for_selector('.spinner-desktop', state="hidden")
-            # Wait a moment for form validation
-            await asyncio.sleep(2)
+            # Optimized waiting
+            try:
+                await page.wait_for_selector('.spinner-desktop', state="hidden", timeout=2000)
+            except:
+                pass
+            
+            # Reduced wait time
+            await asyncio.sleep(0.3)
             
             # Search for the user
-            await page.wait_for_selector('input[name="search"]', state="visible")
+            await page.wait_for_selector('input[name="search"]', state="visible", timeout=3000)
             await page.fill('input[name="search"]', username)
 
-            await page.wait_for_selector('.spinner-desktop', state="hidden")
-            # Wait a moment for form validation
-            await asyncio.sleep(2)
+            # Optimized waiting
+            try:
+                await page.wait_for_selector('.spinner-desktop', state="hidden", timeout=2000)
+            except:
+                pass
+            
+            # Reduced wait time
+            await asyncio.sleep(0.3)
 
             # Look for the user in search results and click TopUp button
             user_rows = await page.query_selector_all('.table-users-desktop__item')
@@ -280,39 +320,48 @@ async def assign_balance(username, amount):
                             await topup_button.click()
                             user_found = True
                             
-                            # Wait for navigation to deposit form
-                            await asyncio.sleep(3)
+                            # Reduced wait time for navigation
+                            await asyncio.sleep(0.5)
                             
-                            await page.wait_for_selector('.spinner-desktop', state="hidden")
-                            # Wait a moment for form validation
-                            await asyncio.sleep(3)
+                            # Optimized waiting
+                            try:
+                                await page.wait_for_selector('.spinner-desktop', state="hidden", timeout=2000)
+                            except:
+                                pass
+                            
+                            # Reduced wait time
+                            await asyncio.sleep(0.3)
                             
                             # Wait for deposit form to load
-                            await page.wait_for_selector('.form-deposit-desktop', state="visible")
+                            await page.wait_for_selector('.form-deposit-desktop', state="visible", timeout=3000)
                             
                             # Find and fill the amount input field
-                            await page.wait_for_selector('input[name="amount"]', state="visible")
+                            await page.wait_for_selector('input[name="amount"]', state="visible", timeout=3000)
                             
-                            # Clear and fill the amount field
-                            await page.fill('input[name="amount"]',"")
+                            # Clear and fill the amount field quickly
+                            await page.fill('input[name="amount"]', "")
                             await page.fill('input[name="amount"]', str(amount))
                             
-                            # Wait a moment for form validation
-                            await asyncio.sleep(1)
+                            # Minimal wait for form validation
+                            await asyncio.sleep(0.2)
                             
                             # Find and click the deposit button
                             await page.click('button[type="submit"]')
 
-                            # Wait for processing
-                            await page.wait_for_selector('.spinner-desktop', state="hidden")
-                            await asyncio.sleep(3)
+                            # Optimized waiting for processing
+                            try:
+                                await page.wait_for_selector('.spinner-desktop', state="hidden", timeout=2000)
+                            except:
+                                pass
+                            
+                            await asyncio.sleep(0.5)
 
-                            # Check for error notification
+                            # Check for error notification with shorter timeout
                             try:
                                 # Wait for either error notification or success notification
                                 notification = await page.wait_for_selector(
                                     '.notification-desktop.notification-desktop_type_error, .notification-desktop.notification-desktop_type_success',
-                                    timeout=10000
+                                    timeout=3000
                                 )
                                 
                                 if notification:
@@ -339,8 +388,8 @@ async def assign_balance(username, amount):
                                 logger.info("No notification found for balance assignment, checking other indicators")
                                 pass
 
-                            # Wait for navigation to complete
-                            await page.wait_for_load_state("networkidle")
+                            # Wait for navigation to complete with shorter timeout
+                            await page.wait_for_load_state("domcontentloaded")
 
                             logger.info(f"Balance {amount} assigned to user {username} successfully")
                             return True, "Balance assigned successfully"
@@ -355,8 +404,6 @@ async def assign_balance(username, amount):
                 logger.error(error_msg)
                 return False, error_msg
             
-            
-            # For demonstration purposes, we'll assume success if no error occurs
             logger.info(f"Balance {amount} assigned to user {username} successfully")
             return True, "Balance assigned successfully"
             

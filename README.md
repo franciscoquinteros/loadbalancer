@@ -1,20 +1,19 @@
 # Balance Loader Bot
 
-A Telegram bot that automates user creation and balance assignment on a private platform using browser automation.
+A high-speed Telegram bot that automates user creation and balance assignment on a private platform using optimized browser automation.
 
 ## Features
 
 ### User Creation Flow
 
-1. An operator sends a username to the Telegram bot
-2. The bot logs into the platform using admin credentials
-3. Creates a new user with the provided username and a fixed password (cocos2025)
-4. Sends a confirmation message back on Telegram with the new user credentials
+1. An operator sends a username to the Telegram bot (e.g., `juanperez98`)
+2. The bot automatically creates a new user with the provided username and password `cocos`
+3. Sends a Spanish confirmation message that can be easily copied and pasted
 
 ### Balance Assignment Flow
 
-1. The operator replies to the user creation message with "load X pesos"
-2. The bot detects which user is being referenced
+1. The operator sends a message with format: `username amount` (e.g., `juanperez98 2000`)
+2. The bot detects the username and amount
 3. Logs into the platform and searches for the user
 4. Assigns the requested amount to the user's account
 5. Confirms the action back via Telegram
@@ -26,6 +25,7 @@ A Telegram bot that automates user creation and balance assignment on a private 
 - Python 3.8 or higher
 - A Telegram Bot Token (get one from [@BotFather](https://t.me/BotFather))
 - Admin credentials for the platform
+- Platform URLs for login, user creation, and balance management
 
 ### Installation
 
@@ -81,14 +81,57 @@ For production deployment on a VPS or server:
 
 ## Usage
 
-1. Start a conversation with your bot on Telegram
-2. To create a user, simply send a username (e.g., "juanperez98")
-3. To load balance, reply to the user creation message with "load X pesos" (e.g., "load 2000 pesos")
+### Creating Users
 
-## Customization
+Send a username to the bot:
 
-You may need to adjust the selectors in the `browser_automation.py` file to match the actual HTML structure of your platform.
+```
+juanperez98
+```
 
-## License
+The bot will create the user and respond with:
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+```
+Tu usuario ha sido creado 🍀
+
+———
+
+🔑Usuario: juanperez98
+🔒Contraseña: cocos
+
+Enlace: https://cocosbet.com
+
+Avisame cuando quieras cargar y te paso el CVU 💫
+
+❗️ VA TODO EN MINÚSCULAS, INCLUYENDO LAS PRIMERAS LETRAS ❗️
+
+———
+```
+
+### Charging Balance
+
+Send a message with format `username amount`:
+
+```
+juanperez98 2000
+```
+
+This will charge 2000 pesos to the user `juanperez98`.
+
+## Performance
+
+The bot is optimized for speed with:
+
+- Reduced wait times between operations
+- Optimized browser settings
+- Persistent browser sessions
+- Streamlined automation workflows
+
+Target performance: 5x faster than human operators
+
+## Rules
+
+- All usernames must be lowercase with only letters, numbers, and underscores
+- All users get the password: `cocos`
+- No confirmation dialogs - operations execute immediately
+- Simple format: `username` for creation, `username amount` for charging
