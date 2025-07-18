@@ -421,29 +421,79 @@ async def assign_balance(username, amount):
             # Wait for search results
             await asyncio.sleep(1.0)
             
-            # Find user row with parallel processing
-            user_rows = await page.query_selector_all('.table-users-desktop__item')
-            
-            if not user_rows:
-                error_msg = f"No users found in search results for: {username}"
-                logger.error(error_msg)
-                return False, error_msg
-            
+            # Find user row with parallel processing - try twice if user not found initially
             user_found = False
-            for user_row in user_rows:
-                username_element = await user_row.query_selector('.table-row-users-desktop__td-user-name')
-                if username_element:
-                    row_username = await username_element.text_content()
-                    if row_username and row_username.strip() == username:
-                        topup_button = await user_row.query_selector('.table-row-users-desktop__td-operations-top-up')
-                        if topup_button:
-                            logger.info(f"Found user {username}, clicking TopUp button")
-                            await topup_button.click()
-                            user_found = True
-                            break
+            search_attempts = 0
+            max_search_attempts = 2
+            
+            while not user_found and search_attempts < max_search_attempts:
+                search_attempts += 1
+                logger.info(f"Search attempt {search_attempts} for user: {username}")
+                
+                user_rows = await page.query_selector_all('.table-users-desktop__item')
+                
+                if not user_rows:
+                    logger.warning(f"No users found in search results for: {username} (attempt {search_attempts})")
+                    
+                    # If no users found and this is the first attempt, try clicking search button
+                    if search_attempts == 1:
+                        logger.info("Attempting to click search button to refresh results")
+                        try:
+                            # Look for the search button with the specific class structure
+                            search_button = await page.query_selector('button.button-desktop.button-desktop_color_default.button-desktop_borderRadius_10')
+                            if search_button:
+                                logger.info("Found search button, clicking it")
+                                await search_button.click()
+                                
+                                # Wait for spinner to appear and then disappear
+                                logger.info("Waiting for spinner loader to appear and disappear")
+                                await asyncio.sleep(5.0)
+                                
+                            else:
+                                logger.warning("Search button not found")
+                                await asyncio.sleep(1.0)
+                                
+                        except Exception as e:
+                            logger.error(f"Error clicking search button: {e}")
+                            await asyncio.sleep(1.0)
+                    
+                    # Continue to next attempt or exit if max attempts reached
+                    if search_attempts >= max_search_attempts:
+                        error_msg = f"No users found in search results for: {username} after {max_search_attempts} attempts"
+                        logger.error(error_msg)
+                        return False, error_msg
+                    continue
+                
+                # Check each user row for matching username
+                for user_row in user_rows:
+                    username_element = await user_row.query_selector('.table-row-users-desktop__td-user-name')
+                    if username_element:
+                        row_username = await username_element.text_content()
+                        if row_username and row_username.strip() == username:
+                            topup_button = await user_row.query_selector('.table-row-users-desktop__td-operations-top-up')
+                            if topup_button:
+                                logger.info(f"Found user {username}, clicking TopUp button")
+                                await topup_button.click()
+                                user_found = True
+                                break
+                
+                # If user still not found after checking all rows, continue to next attempt
+                if not user_found:
+                    logger.warning(f"User {username} not found in current results (attempt {search_attempts})")
+                    
+                    # If this is not the last attempt, try clicking search button again
+                    if search_attempts < max_search_attempts:
+                        logger.info("Trying search button click for next attempt")
+                        try:
+                            search_button = await page.query_selector('button.button-desktop.button-desktop_color_default.button-desktop_borderRadius_10')
+                            if search_button:
+                                await search_button.click()
+                                await asyncio.sleep(1.0)
+                        except Exception as e:
+                            logger.warning(f"Error in additional search button click: {e}")
             
             if not user_found:
-                error_msg = f"User {username} not found in search results"
+                error_msg = f"User {username} not found in search results after {max_search_attempts} attempts"
                 logger.error(error_msg)
                 return False, error_msg
             
