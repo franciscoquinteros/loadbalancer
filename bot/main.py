@@ -7,6 +7,7 @@ import logging
 import signal
 import sys
 import re
+import asyncio
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler, CallbackQueryHandler
@@ -28,6 +29,10 @@ AWAITING_USERNAME, AWAITING_BALANCE = range(2)
 
 # File to store user contexts
 CONTEXT_FILE = 'user_contexts.json'
+
+# Concurrent operation tracking
+active_operations = set()
+operation_lock = asyncio.Lock()
 
 # Load user contexts from file or initialize empty dict
 def load_user_contexts():
@@ -69,6 +74,38 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         parse_mode='Markdown'
     )
 
+async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show debug information for troubleshooting."""
+    # Get environment variables (without showing sensitive values)
+    admin_url = os.getenv("ADMIN_LOGIN_URL")
+    create_url = os.getenv("CREATE_USER_URL") 
+    balance_url = os.getenv("BALANCE_URL")
+    admin_user = os.getenv("ADMIN_USERNAME")
+    admin_pass = os.getenv("ADMIN_PASSWORD")
+    
+    debug_info = (
+        f"🔧 **Debug Information**\n\n"
+        f"**Environment Variables:**\n"
+        f"• ADMIN_LOGIN_URL: {'✅ SET' if admin_url else '❌ MISSING'}\n"
+        f"• CREATE_USER_URL: {'✅ SET' if create_url else '❌ MISSING'}\n"
+        f"• BALANCE_URL: {'✅ SET' if balance_url else '❌ MISSING'}\n"
+        f"• ADMIN_USERNAME: {'✅ SET' if admin_user else '❌ MISSING'}\n"
+        f"• ADMIN_PASSWORD: {'✅ SET' if admin_pass else '❌ MISSING'}\n\n"
+        f"**URLs (if set):**\n"
+        f"• Login: `{admin_url[:50] + '...' if admin_url and len(admin_url) > 50 else admin_url or 'NOT SET'}`\n"
+        f"• Create User: `{create_url[:50] + '...' if create_url and len(create_url) > 50 else create_url or 'NOT SET'}`\n"
+        f"• Balance: `{balance_url[:50] + '...' if balance_url and len(balance_url) > 50 else balance_url or 'NOT SET'}`\n\n"
+        f"**Status:**\n"
+        f"• Active operations: {len(active_operations)}\n"
+        f"• Browser context exists: {'✅' if Path('browser_context/state.json').exists() else '❌'}\n\n"
+        f"**Troubleshooting:**\n"
+        f"• If environment variables are missing, check your `.env` file\n"
+        f"• Use `/clear_context` to reset browser session if login fails\n"
+        f"• Check logs for detailed error messages"
+    )
+    
+    await update.message.reply_text(debug_info, parse_mode='Markdown')
+
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /help is issued."""
     await update.message.reply_text(
@@ -86,11 +123,28 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "**Commands:**\n"
         "• `/start` - Show welcome message\n"
         "• `/help` - Show this help\n"
-        "• `/clear_context` - Clear saved browser session\n\n"
+        "• `/clear_context` - Clear saved browser session\n"
+        "• `/status` - Show bot performance stats\n"
+        "• `/debug` - Show troubleshooting information\n"
+        "• `/test_login` - Test platform login connectivity\n\n"
         "**Notes:**\n"
         "• All new users get the password: cocos\n"
         "• Browser session is saved to avoid re-login\n"
-        "• All usernames and amounts should be in lowercase",
+        "• All usernames and amounts should be in lowercase\n"
+        "• Multiple requests are processed concurrently for maximum speed",
+        parse_mode='Markdown'
+    )
+
+async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show bot performance and status information."""
+    active_count = len(active_operations)
+    await update.message.reply_text(
+        f"🚀 **Bot Status**\n\n"
+        f"⚡ Active operations: {active_count}\n"
+        f"🔧 Performance mode: Ultra-Fast\n"
+        f"🌐 Browser session: Persistent\n"
+        f"💨 Speed optimization: Maximum\n\n"
+        f"✅ Ready for requests!",
         parse_mode='Markdown'
     )
 
@@ -122,6 +176,10 @@ async def clear_browser_context(update: Update, context: ContextTypes.DEFAULT_TY
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle all text messages - either user creation or balance charging."""
     message_text = update.message.text.strip().lower()
+    user_id = update.effective_user.id
+    
+    # Create unique operation ID for tracking
+    operation_id = f"{user_id}_{asyncio.get_event_loop().time()}"
     
     # Check if message contains space (indicating username + amount format)
     if ' ' in message_text:
@@ -131,7 +189,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             username = parts[0]
             try:
                 amount = int(parts[1])
-                await charge_balance(update, context, username, amount)
+                # Process charge balance concurrently
+                asyncio.create_task(charge_balance_concurrent(update, context, username, amount, operation_id))
                 return
             except ValueError:
                 await update.message.reply_text(
@@ -164,111 +223,163 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
             return
         
-        await create_new_user(update, context, username)
+        # Process user creation concurrently
+        asyncio.create_task(create_new_user_concurrent(update, context, username, operation_id))
 
-async def create_new_user(update: Update, context: ContextTypes.DEFAULT_TYPE, username: str) -> None:
-    """Handle user creation requests."""
-    # Fixed password as per requirements
-    password = "cocos"
-    
-    # Send processing message
-    processing_message = await update.message.reply_text(
-        f"⏳ Creating user `{username}`... Please wait.",
-        parse_mode='Markdown'
-    )
+async def create_new_user_concurrent(update: Update, context: ContextTypes.DEFAULT_TYPE, username: str, operation_id: str) -> None:
+    """Handle user creation requests with concurrent processing."""
+    async with operation_lock:
+        active_operations.add(operation_id)
     
     try:
-        # Call the browser automation function to create the user
-        success, message = await create_user(username, password)
+        # Fixed password as per requirements
+        password = "cocos"
         
-        # Try to delete the processing message
+        # Send processing message instantly
+        processing_message = await update.message.reply_text(
+            f"⚡ Creating user `{username}`...",
+            parse_mode='Markdown'
+        )
+        
         try:
+            # Call the browser automation function to create the user
+            success, message = await create_user(username, password)
+            
+            # Delete processing message immediately
             await processing_message.delete()
+            
+            if success:
+                # Create Spanish success message that can be copied easily
+                success_message = (
+                    f"Tu usuario ha sido creado 🍀\n\n"
+                    f"———\n\n"
+                    f"🔑Usuario: {username}\n"
+                    f"🔒Contraseña: cocos\n\n"
+                    f"Enlace: https://cocosbet.com\n\n"
+                    f"Avisame cuando quieras cargar y te paso el CVU 💫\n\n"
+                    f"❗️ VA TODO EN MINÚSCULAS, INCLUYENDO LAS PRIMERAS LETRAS ❗️\n\n"
+                    f"———"
+                )
+                
+                await update.message.reply_text(success_message)
+                
+            else:
+                await update.message.reply_text(
+                    f"❌ **Failed to create user**\n\n"
+                    f"Please try again with different username.",
+                    parse_mode='Markdown'
+                )
         except Exception as e:
-            logger.warning(f"Could not delete processing message: {e}")
-        
-        if success:
-            # Create Spanish success message that can be copied easily
-            success_message = (
-                f"Tu usuario ha sido creado 🍀\n\n"
-                f"———\n\n"
-                f"🔑Usuario: {username}\n"
-                f"🔒Contraseña: cocos\n\n"
-                f"Enlace: https://cocosbet.com\n\n"
-                f"Avisame cuando quieras cargar y te paso el CVU 💫\n\n"
-                f"❗️ VA TODO EN MINÚSCULAS, INCLUYENDO LAS PRIMERAS LETRAS ❗️\n\n"
-                f"———"
-            )
+            logger.error(f"Error creating user: {e}")
             
-            await update.message.reply_text(success_message)
-            
-        else:
+            # Try to delete the processing message even if an error occurred
+            try:
+                await processing_message.delete()
+            except:
+                pass
+                
             await update.message.reply_text(
-                f"❌ **Failed to create user**\n\n"
+                f"❌ **An error occurred while creating the user**\n\n"
                 f"Please try again with different username.",
                 parse_mode='Markdown'
             )
-    except Exception as e:
-        logger.error(f"Error creating user: {e}")
-        
-        # Try to delete the processing message even if an error occurred
-        try:
-            await processing_message.delete()
-        except Exception as delete_error:
-            logger.warning(f"Could not delete processing message: {delete_error}")
-            
-        await update.message.reply_text(
-            f"❌ **An error occurred while creating the user**\n\n"
-            f"Please try again with different username.",
-            parse_mode='Markdown'
-        )
+    finally:
+        async with operation_lock:
+            active_operations.discard(operation_id)
 
-async def charge_balance(update: Update, context: ContextTypes.DEFAULT_TYPE, username: str, amount: int) -> None:
-    """Handle balance charging requests."""
-    
-    # Send processing message
-    processing_message = await update.message.reply_text(
-        f"⏳ Charging {amount} pesos to user `{username}`... Please wait.",
-        parse_mode='Markdown'
-    )
+async def charge_balance_concurrent(update: Update, context: ContextTypes.DEFAULT_TYPE, username: str, amount: int, operation_id: str) -> None:
+    """Handle balance charging requests with concurrent processing."""
+    async with operation_lock:
+        active_operations.add(operation_id)
     
     try:
-        # Call the browser automation function to assign balance
-        success, message = await assign_balance(username, amount)
+        # Send processing message instantly
+        processing_message = await update.message.reply_text(
+            f"⚡ Charging {amount} pesos to `{username}`...",
+            parse_mode='Markdown'
+        )
         
-        # Try to delete the processing message
         try:
+            # Call the browser automation function to assign balance
+            success, message = await assign_balance(username, amount)
+            
+            # Delete processing message immediately
             await processing_message.delete()
+            
+            if success:
+                await update.message.reply_text(
+                    f"✅ **Balance charged successfully!**\n\n"
+                    f"👤 User: `{username}`\n"
+                    f"💰 Amount: `{amount} pesos`",
+                    parse_mode='Markdown'
+                )
+            else:
+                await update.message.reply_text(
+                    f"❌ **Failed to charge balance**\n\n"
+                    f"**Error:** {message}\n\n"
+                    f"Please try again later.",
+                    parse_mode='Markdown'
+                )
         except Exception as e:
-            logger.warning(f"Could not delete processing message: {e}")
-        
-        if success:
+            logger.error(f"Error charging balance: {e}")
+            
+            # Try to delete the processing message even if an error occurred
+            try:
+                await processing_message.delete()
+            except:
+                pass
+                
             await update.message.reply_text(
-                f"✅ **Balance charged successfully!**\n\n"
-                f"👤 User: `{username}`\n"
-                f"💰 Amount: `{amount} pesos`",
-                parse_mode='Markdown'
-            )
-        else:
-            await update.message.reply_text(
-                f"❌ **Failed to charge balance**\n\n"
-                f"**Error:** {message}\n\n"
+                f"❌ **An error occurred while charging balance**\n\n"
+                f"**Error:** {str(e)}\n\n"
                 f"Please try again later.",
                 parse_mode='Markdown'
             )
-    except Exception as e:
-        logger.error(f"Error charging balance: {e}")
+    finally:
+        async with operation_lock:
+            active_operations.discard(operation_id)
+
+async def test_login_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Test login functionality without performing any operations."""
+    from browser_automation import get_browser_context, login_to_platform
+    
+    processing_message = await update.message.reply_text("🔍 Testing login...")
+    
+    try:
+        # Get browser context
+        browser_context = await get_browser_context()
+        page = await browser_context.new_page()
         
-        # Try to delete the processing message even if an error occurred
         try:
-            await processing_message.delete()
-        except Exception as delete_error:
-            logger.warning(f"Could not delete processing message: {delete_error}")
+            # Test login
+            login_success = await login_to_platform(page)
             
-        await update.message.reply_text(
-            f"❌ **An error occurred while charging balance**\n\n"
-            f"**Error:** {str(e)}\n\n"
-            f"Please try again later.",
+            if login_success:
+                await processing_message.edit_text(
+                    "✅ **Login test successful!**\n\n"
+                    "The bot can successfully log into the platform.\n"
+                    "You can now create users and charge balances.",
+                    parse_mode='Markdown'
+                )
+            else:
+                await processing_message.edit_text(
+                    "❌ **Login test failed!**\n\n"
+                    "Please check:\n"
+                    "• Your `.env` file has correct credentials\n"
+                    "• Platform URLs are accessible\n"
+                    "• Admin credentials are valid\n"
+                    "• Use `/debug` for more information",
+                    parse_mode='Markdown'
+                )
+        finally:
+            await page.close()
+            
+    except Exception as e:
+        logger.error(f"Error in login test: {e}")
+        await processing_message.edit_text(
+            f"❌ **Login test error:**\n\n"
+            f"`{str(e)}`\n\n"
+            f"Use `/debug` for troubleshooting information.",
             parse_mode='Markdown'
         )
 
@@ -299,19 +410,26 @@ def main() -> None:
     global user_contexts
     user_contexts = load_user_contexts()
     
-    # Create the Application
-    application = Application.builder().token(os.getenv("TELEGRAM_BOT_TOKEN")).build()
+    # Create the Application with optimized settings
+    application = (Application.builder()
+                  .token(os.getenv("TELEGRAM_BOT_TOKEN"))
+                  .concurrent_updates(True)  # Enable concurrent update processing
+                  .build())
 
     # Add command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("status", status_command))
     application.add_handler(CommandHandler("clear_context", clear_browser_context))
+    application.add_handler(CommandHandler("debug", debug_command))
+    application.add_handler(CommandHandler("test_login", test_login_command))
     
     # Add message handler for all text messages (not commands)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     try:
         # Run the bot until the user presses Ctrl-C
+        logger.info("Starting bot with ultra-fast performance optimizations...")
         application.run_polling(allowed_updates=Update.ALL_TYPES)
     except KeyboardInterrupt:
         logger.info("Bot stopped by user")

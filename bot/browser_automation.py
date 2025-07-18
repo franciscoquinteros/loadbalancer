@@ -43,7 +43,7 @@ async def get_browser_context():
         # Create browser context directory if it doesn't exist
         BROWSER_CONTEXT_PATH.mkdir(exist_ok=True)
         
-        # Launch browser with optimized settings for speed
+        # Launch browser with maximum performance optimizations
         _browser = await _playwright.chromium.launch(
             headless=True,
             args=[
@@ -57,7 +57,20 @@ async def get_browser_context():
                 '--disable-default-apps',
                 '--disable-background-timer-throttling',
                 '--disable-backgrounding-occluded-windows',
-                '--disable-renderer-backgrounding'
+                '--disable-renderer-backgrounding',
+                '--disable-sync',
+                '--disable-translate',
+                '--disable-ipc-flooding-protection',
+                '--disable-hang-monitor',
+                '--disable-prompt-on-repost',
+                '--disable-domain-reliability',
+                '--disable-component-extensions-with-background-pages',
+                '--disable-background-networking',
+                '--disable-features=TranslateUI',
+                '--no-default-browser-check',
+                '--no-pings',
+                '--memory-pressure-off',
+                '--max_old_space_size=4096'
             ]
         )
         
@@ -89,27 +102,49 @@ async def save_browser_context():
 async def is_logged_in(page):
     """Check if we're already logged in by looking for login-specific elements"""
     try:
-        # Go to the create user page and check if we're redirected to login
+        logger.info("Checking login status...")
+        
+        # Navigate to create user page to test access
+        logger.info(f"Navigating to: {CREATE_USER_URL}")
         await page.goto(CREATE_USER_URL, wait_until="domcontentloaded")
         
-        # Quick check for login form
+        # Wait for page to fully load
+        await asyncio.sleep(0.5)
+        
+        # Check for login form (indicates not logged in)
         login_form = await page.query_selector('input[name="login"]')
         if login_form:
             logger.info("Not logged in - login form detected")
             return False
         
-        # Quick check for user creation form elements
+        # Check for user creation form (indicates logged in)
         username_input = await page.query_selector('input[name="username"]')
         if username_input:
             logger.info("Already logged in - user creation form detected")
             return True
         
-        # If neither, assume we need to login
-        logger.info("Login status unclear - assuming not logged in")
+        # If neither found, check page URL and content for more clues
+        current_url = page.url
+        logger.info(f"Current URL: {current_url}")
+        
+        # Check if we're redirected to login page
+        if "login" in current_url.lower():
+            logger.info("Login status: redirected to login page - not logged in")
+            return False
+        
+        # Check if we're on the expected page
+        if CREATE_USER_URL in current_url:
+            logger.info("Login status: on create user page but no form detected - assuming logged in")
+            return True
+        
+        # Default to not logged in for safety
+        logger.info("Login status unclear - assuming not logged in for safety")
         return False
         
     except Exception as e:
         logger.error(f"Error checking login status: {e}")
+        import traceback
+        logger.error(f"Login check traceback: {traceback.format_exc()}")
         return False
 
 async def login_to_platform(page):
@@ -121,38 +156,91 @@ async def login_to_platform(page):
             return True
         
         logger.info("Not logged in, proceeding with login")
+        
+        # Validate environment variables
+        if not ADMIN_LOGIN_URL or not ADMIN_USERNAME or not ADMIN_PASSWORD:
+            logger.error("Missing login credentials in environment variables")
+            logger.error(f"ADMIN_LOGIN_URL: {'SET' if ADMIN_LOGIN_URL else 'MISSING'}")
+            logger.error(f"ADMIN_USERNAME: {'SET' if ADMIN_USERNAME else 'MISSING'}")
+            logger.error(f"ADMIN_PASSWORD: {'SET' if ADMIN_PASSWORD else 'MISSING'}")
+            return False
+        
+        # Navigate with moderate waiting for better reliability
+        logger.info(f"Navigating to login URL: {ADMIN_LOGIN_URL}")
         await page.goto(ADMIN_LOGIN_URL, wait_until="domcontentloaded")
         
-        # Wait for the login form to be visible with shorter timeout
-        await page.wait_for_selector('input[name="login"]', state="visible", timeout=5000)
-        await page.wait_for_selector('input[name="password"]', state="visible", timeout=5000)
-        
-        # Fill in the login form quickly
-        await page.fill('input[name="login"]', ADMIN_USERNAME)
-        await page.fill('input[name="password"]', ADMIN_PASSWORD)
-        
-        # Click the login button
-        await page.click('button[type="submit"]')
-
-        # Optimized waiting - check for spinner and wait much less
-        try:
-            await page.wait_for_selector('.spinner-desktop', state="hidden", timeout=3000)
-        except:
-            pass  # Continue even if spinner not found
-        
-        # Reduced wait time
+        # Wait a bit longer for login form to be ready
         await asyncio.sleep(0.5)
         
-        # Wait for navigation to complete with shorter timeout
-        await page.wait_for_load_state("domcontentloaded")
+        # Check if login form is present
+        login_input_present = await page.query_selector('input[name="login"]')
+        password_input_present = await page.query_selector('input[name="password"]')
+        submit_button_present = await page.query_selector('button[type="submit"]')
         
-        # Save the context after successful login
-        await save_browser_context()
+        if not login_input_present:
+            logger.error("Login input field not found on page")
+            return False
+        if not password_input_present:
+            logger.error("Password input field not found on page")
+            return False
+        if not submit_button_present:
+            logger.error("Submit button not found on page")
+            return False
         
-        logger.info("Login successful and context saved")
-        return True
+        logger.info("Login form elements found, proceeding with form filling")
+        
+        # Use more reliable selector-based approach
+        try:
+            # Fill login field
+            await page.fill('input[name="login"]', ADMIN_USERNAME)
+            await asyncio.sleep(0.1)
+            
+            # Fill password field
+            await page.fill('input[name="password"]', ADMIN_PASSWORD)
+            await asyncio.sleep(0.1)
+            
+            # Submit the form
+            await page.click('button[type="submit"]')
+            logger.info("Login form submitted")
+            
+        except Exception as e:
+            logger.error(f"Error filling login form: {e}")
+            return False
+        
+        # Wait for login processing with reasonable timeout
+        await asyncio.sleep(1.0)
+        
+        # Check for login success by looking for redirect or success indicators
+        try:
+            # Try navigating to create user page to test login
+            await page.goto(CREATE_USER_URL, wait_until="domcontentloaded")
+            await asyncio.sleep(0.5)
+            
+            # Check if we can see user creation form (indicates successful login)
+            username_input = await page.query_selector('input[name="username"]')
+            if username_input:
+                # Save context in background
+                asyncio.create_task(save_browser_context())
+                logger.info("Login successful - user creation form accessible")
+                return True
+            else:
+                # Check if we're still on login page (indicates failed login)
+                login_form = await page.query_selector('input[name="login"]')
+                if login_form:
+                    logger.error("Login failed - still on login page")
+                    return False
+                else:
+                    logger.warning("Login status unclear - proceeding with caution")
+                    return True
+                    
+        except Exception as e:
+            logger.error(f"Error checking login success: {e}")
+            return False
+        
     except Exception as e:
         logger.error(f"Error during login: {e}")
+        import traceback
+        logger.error(f"Login traceback: {traceback.format_exc()}")
         return False
 
 async def create_user(username, password):
@@ -169,49 +257,52 @@ async def create_user(username, password):
                 logger.error(error_msg)
                 return False, error_msg
             
-            # Navigate to the create user page
+            # Navigate with minimal waiting
             await page.goto(CREATE_USER_URL, wait_until="domcontentloaded")
-
-            # Optimized waiting
-            try:
-                await page.wait_for_selector('.spinner-desktop', state="hidden", timeout=2000)
-            except:
-                pass
             
-            # Reduced wait time
-            await asyncio.sleep(0.3)
+            # Wait for page to be ready
+            await asyncio.sleep(0.5)
             
-            # Wait for the create user form to be visible with shorter timeouts
-            await page.wait_for_selector('input[name="username"]', state="visible", timeout=3000)
-            await page.wait_for_selector('input[name="password"]', state="visible", timeout=3000)
-            await page.wait_for_selector('input[name="password2"]', state="visible", timeout=3000)
+            # Check if form elements are present
+            username_input = await page.query_selector('input[name="username"]')
+            password_input = await page.query_selector('input[name="password"]')
+            password2_input = await page.query_selector('input[name="password2"]')
+            submit_button = await page.query_selector('button[type="submit"]')
             
-            # Fill in the form quickly
+            if not username_input or not password_input or not password2_input or not submit_button:
+                error_msg = "User creation form elements not found on page"
+                logger.error(error_msg)
+                return False, error_msg
+            
+            logger.info(f"Creating user {username} with form submission")
+            
+            # Fill form fields
             await page.fill('input[name="username"]', username)
+            await asyncio.sleep(0.1)
             await page.fill('input[name="password"]', password)
+            await asyncio.sleep(0.1)
             await page.fill('input[name="password2"]', password)
+            await asyncio.sleep(0.1)
             
             # Submit the form
-            await page.click('button[type="submit"]')    
-
-            # Optimized waiting
-            try:
-                await page.wait_for_selector('.spinner-desktop', state="hidden", timeout=2000)
-            except:
-                pass
+            await page.click('button[type="submit"]')
+            logger.info("User creation form submitted, waiting for confirmation...")
             
-            # Reduced wait time
-            await asyncio.sleep(0.3)
+            # Wait for and check toast notifications with extended timeout
+            success = False
+            error_message = None
             
-            # Check for error notification with shorter timeout
             try:
-                # Wait for either error notification or success notification
+                # Wait longer for notifications to appear (some sites take time)
+                logger.info("Waiting for toast notification...")
                 notification = await page.wait_for_selector(
                     '.notification-desktop.notification-desktop_type_error, .notification-desktop.notification-desktop_type_success',
-                    timeout=3000
+                    timeout=10000  # Wait up to 10 seconds for notification
                 )
                 
                 if notification:
+                    logger.info("Toast notification found, checking type...")
+                    
                     # Check if it's an error notification
                     is_error = await notification.evaluate('element => element.classList.contains("notification-desktop_type_error")')
                     is_success = await notification.evaluate('element => element.classList.contains("notification-desktop_type_success")')
@@ -220,36 +311,70 @@ async def create_user(username, password):
                     text_element = await notification.query_selector('.notification-desktop__text')
                     if text_element:
                         notification_text = await text_element.text_content()
+                        logger.info(f"Toast notification text: {notification_text}")
                         
                         if is_error:
-                            error_msg = f"User creation failed: {notification_text}"
-                            logger.error(error_msg)
-                            return False, error_msg
+                            error_message = f"User creation failed: {notification_text}"
+                            logger.error(error_message)
+                            success = False
                         elif is_success:
                             success_msg = f"User created successfully: {notification_text}"
                             logger.info(success_msg)
-                            return True, success_msg
+                            success = True
+                        else:
+                            # Fallback: check notification text content for success/error keywords
+                            notification_lower = notification_text.lower()
+                            if any(word in notification_lower for word in ['success', 'created', 'successful', 'added']):
+                                logger.info("Toast indicates success based on text content")
+                                success = True
+                            elif any(word in notification_lower for word in ['error', 'failed', 'exists', 'invalid']):
+                                error_message = f"User creation failed: {notification_text}"
+                                logger.error(error_message)
+                                success = False
+                            else:
+                                error_message = f"Ambiguous notification: {notification_text}"
+                                logger.warning(error_message)
+                                success = False
+                    else:
+                        logger.warning("Toast notification found but no text content")
+                        success = False
+                        error_message = "Notification appeared but no message text found"
+                else:
+                    logger.warning("No toast notification found")
+                    success = False
+                    error_message = "No confirmation notification received"
                     
-            except Exception:
-                # No notification found within timeout, check other indicators
-                logger.info("No notification found, checking other success indicators")
-                pass
+            except Exception as e:
+                logger.error(f"Error waiting for toast notification: {e}")
+                error_message = f"Failed to get confirmation: {str(e)}"
+                success = False
             
-            # Wait for navigation to complete with shorter timeout
-            await page.wait_for_load_state("domcontentloaded")        
+            # If we have a definitive result from toast, use it
+            if success:
+                logger.info(f"User {username} creation confirmed by toast notification")
+                return True, "User created successfully"
+            elif error_message:
+                logger.error(f"User {username} creation failed: {error_message}")
+                return False, error_message
             
-            # Additional check: if we're still on the create user page, it might indicate an error
-            current_url = page.url
-            if CREATE_USER_URL in current_url:
-                # Still on create user page, check if form was cleared (success) or still has values (error)
+            # Fallback check: if no toast found, check form state and page behavior
+            logger.info("No definitive toast found, performing fallback checks...")
+            
+            # Wait a bit more for page to settle
+            await asyncio.sleep(1.0)
+            
+            # Check if form was cleared (common success indicator)
+            try:
                 username_value = await page.get_attribute('input[name="username"]', 'value')
-                if username_value and username_value.strip():
-                    error_msg = "User creation failed: Form validation error"
-                    logger.error(error_msg)
-                    return False, error_msg
-            
-            logger.info(f"User {username} created successfully")
-            return True, "User created successfully"
+                if not username_value or username_value.strip() == "":
+                    logger.info("Form cleared - likely successful user creation")
+                    return True, "User created successfully (form cleared)"
+                else:
+                    logger.error("Form still contains data - likely failed user creation")
+                    return False, "User creation failed: Form validation error"
+            except Exception as e:
+                logger.error(f"Error checking form state: {e}")
+                return False, f"User creation status unclear: {str(e)}"
             
         except Exception as e:
             error_msg = f"Error creating user: {str(e)}"
@@ -277,135 +402,140 @@ async def assign_balance(username, amount):
                 logger.error(error_msg)
                 return False, error_msg
             
-            # Navigate to the balance page
+            # Navigate with minimal waiting
             await page.goto(BALANCE_URL, wait_until="domcontentloaded")
-
-            # Optimized waiting
-            try:
-                await page.wait_for_selector('.spinner-desktop', state="hidden", timeout=2000)
-            except:
-                pass
             
-            # Reduced wait time
-            await asyncio.sleep(0.3)
+            # Wait for page to be ready
+            await asyncio.sleep(0.5)
             
             # Search for the user
-            await page.wait_for_selector('input[name="search"]', state="visible", timeout=3000)
-            await page.fill('input[name="search"]', username)
-
-            # Optimized waiting
-            try:
-                await page.wait_for_selector('.spinner-desktop', state="hidden", timeout=2000)
-            except:
-                pass
+            search_input = await page.query_selector('input[name="search"]')
+            if not search_input:
+                error_msg = "Search input not found on balance page"
+                logger.error(error_msg)
+                return False, error_msg
             
-            # Reduced wait time
-            await asyncio.sleep(0.3)
-
-            # Look for the user in search results and click TopUp button
+            logger.info(f"Searching for user: {username}")
+            await page.fill('input[name="search"]', username)
+            
+            # Wait for search results
+            await asyncio.sleep(1.0)
+            
+            # Find user row with parallel processing
             user_rows = await page.query_selector_all('.table-users-desktop__item')
-
+            
+            if not user_rows:
+                error_msg = f"No users found in search results for: {username}"
+                logger.error(error_msg)
+                return False, error_msg
+            
             user_found = False
             for user_row in user_rows:
-                # Check if this row contains the target username
                 username_element = await user_row.query_selector('.table-row-users-desktop__td-user-name')
                 if username_element:
                     row_username = await username_element.text_content()
                     if row_username and row_username.strip() == username:
-                        # Look for the TopUp button in this row
                         topup_button = await user_row.query_selector('.table-row-users-desktop__td-operations-top-up')
-                        
                         if topup_button:
-                            # Click the TopUp button
+                            logger.info(f"Found user {username}, clicking TopUp button")
                             await topup_button.click()
                             user_found = True
-                            
-                            # Reduced wait time for navigation
-                            await asyncio.sleep(0.5)
-                            
-                            # Optimized waiting
-                            try:
-                                await page.wait_for_selector('.spinner-desktop', state="hidden", timeout=2000)
-                            except:
-                                pass
-                            
-                            # Reduced wait time
-                            await asyncio.sleep(0.3)
-                            
-                            # Wait for deposit form to load
-                            await page.wait_for_selector('.form-deposit-desktop', state="visible", timeout=3000)
-                            
-                            # Find and fill the amount input field
-                            await page.wait_for_selector('input[name="amount"]', state="visible", timeout=3000)
-                            
-                            # Clear and fill the amount field quickly
-                            await page.fill('input[name="amount"]', "")
-                            await page.fill('input[name="amount"]', str(amount))
-                            
-                            # Minimal wait for form validation
-                            await asyncio.sleep(0.2)
-                            
-                            # Find and click the deposit button
-                            await page.click('button[type="submit"]')
-
-                            # Optimized waiting for processing
-                            try:
-                                await page.wait_for_selector('.spinner-desktop', state="hidden", timeout=2000)
-                            except:
-                                pass
-                            
-                            await asyncio.sleep(0.5)
-
-                            # Check for error notification with shorter timeout
-                            try:
-                                # Wait for either error notification or success notification
-                                notification = await page.wait_for_selector(
-                                    '.notification-desktop.notification-desktop_type_error, .notification-desktop.notification-desktop_type_success',
-                                    timeout=3000
-                                )
-                                
-                                if notification:
-                                    # Check if it's an error notification
-                                    is_error = await notification.evaluate('element => element.classList.contains("notification-desktop_type_error")')
-                                    is_success = await notification.evaluate('element => element.classList.contains("notification-desktop_type_success")')
-                                    
-                                    # Get the notification message text
-                                    text_element = await notification.query_selector('.notification-desktop__text')
-                                    if text_element:
-                                        notification_text = await text_element.text_content()
-                                        
-                                        if is_error:
-                                            error_msg = f"Balance assignment failed: {notification_text}"
-                                            logger.error(error_msg)
-                                            return False, error_msg
-                                        elif is_success:
-                                            success_msg = f"Balance assigned successfully: {notification_text}"
-                                            logger.info(success_msg)
-                                            return True, success_msg
-                                    
-                            except Exception:
-                                # No notification found within timeout, check other indicators
-                                logger.info("No notification found for balance assignment, checking other indicators")
-                                pass
-
-                            # Wait for navigation to complete with shorter timeout
-                            await page.wait_for_load_state("domcontentloaded")
-
-                            logger.info(f"Balance {amount} assigned to user {username} successfully")
-                            return True, "Balance assigned successfully"
-                        else:
-                            error_msg = "TopUp button not found for user"
-                            logger.error(error_msg)
-                            return False, error_msg
-                        break
+                            break
             
             if not user_found:
                 error_msg = f"User {username} not found in search results"
                 logger.error(error_msg)
                 return False, error_msg
             
-            logger.info(f"Balance {amount} assigned to user {username} successfully")
-            return True, "Balance assigned successfully"
+            # Wait for deposit form to load
+            await asyncio.sleep(1.0)
+            
+            # Check if deposit form loaded
+            amount_input = await page.query_selector('input[name="amount"]')
+            submit_button = await page.query_selector('button[type="submit"]')
+            
+            if not amount_input or not submit_button:
+                error_msg = "Deposit form elements not found"
+                logger.error(error_msg)
+                return False, error_msg
+            
+            logger.info(f"Filling amount: {amount}")
+            # Fill amount field
+            await page.fill('input[name="amount"]', '')  # Clear first
+            await page.fill('input[name="amount"]', str(amount))
+            await asyncio.sleep(0.2)
+            
+            # Submit the deposit form
+            await page.click('button[type="submit"]')
+            logger.info("Balance assignment form submitted, waiting for confirmation...")
+            
+            # Wait for and check toast notifications
+            success = False
+            error_message = None
+            
+            try:
+                # Wait for notifications to appear
+                logger.info("Waiting for balance assignment toast notification...")
+                notification = await page.wait_for_selector(
+                    '.notification-desktop.notification-desktop_type_error, .notification-desktop.notification-desktop_type_success',
+                    timeout=10000  # Wait up to 10 seconds
+                )
+                
+                if notification:
+                    logger.info("Toast notification found for balance assignment")
+                    
+                    # Check notification type
+                    is_error = await notification.evaluate('element => element.classList.contains("notification-desktop_type_error")')
+                    is_success = await notification.evaluate('element => element.classList.contains("notification-desktop_type_success")')
+                    
+                    # Get notification text
+                    text_element = await notification.query_selector('.notification-desktop__text')
+                    if text_element:
+                        notification_text = await text_element.text_content()
+                        logger.info(f"Balance assignment toast text: {notification_text}")
+                        
+                        if is_error:
+                            error_message = f"Balance assignment failed: {notification_text}"
+                            logger.error(error_message)
+                            success = False
+                        elif is_success:
+                            logger.info(f"Balance assignment successful: {notification_text}")
+                            success = True
+                        else:
+                            # Check text content for success/error keywords
+                            notification_lower = notification_text.lower()
+                            if any(word in notification_lower for word in ['success', 'added', 'deposited', 'credited', 'completed']):
+                                logger.info("Toast indicates balance assignment success")
+                                success = True
+                            elif any(word in notification_lower for word in ['error', 'failed', 'insufficient', 'invalid']):
+                                error_message = f"Balance assignment failed: {notification_text}"
+                                logger.error(error_message)
+                                success = False
+                            else:
+                                error_message = f"Ambiguous balance notification: {notification_text}"
+                                logger.warning(error_message)
+                                success = False
+                    else:
+                        logger.warning("Balance assignment toast found but no text content")
+                        error_message = "Balance notification appeared but no message text found"
+                        success = False
+                else:
+                    logger.warning("No balance assignment toast notification found")
+                    error_message = "No balance assignment confirmation received"
+                    success = False
+                    
+            except Exception as e:
+                logger.error(f"Error waiting for balance assignment toast: {e}")
+                error_message = f"Failed to get balance assignment confirmation: {str(e)}"
+                success = False
+            
+            # Return definitive result
+            if success:
+                logger.info(f"Balance assignment to {username} confirmed by toast")
+                return True, "Balance assigned successfully"
+            else:
+                logger.error(f"Balance assignment to {username} failed: {error_message}")
+                return False, error_message or "Balance assignment failed - no confirmation received"
             
         except Exception as e:
             error_msg = f"Error assigning balance: {str(e)}"
