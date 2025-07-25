@@ -8,6 +8,7 @@ import signal
 import sys
 import re
 import asyncio
+import math
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler, CallbackQueryHandler
@@ -70,6 +71,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "   Example: `juanperez98`\n\n"
         "2. Send 'username amount' to charge balance\n"
         "   Example: `juanperez98 2000`\n\n"
+        "3. Send 'username amount b<percentage>' for bonus deposits\n"
+        "   Example: `juan100 2000 b30` (2000 + 30% bonus)\n\n"
         "Use /help for more information.",
         parse_mode='Markdown'
     )
@@ -116,10 +119,15 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "**Balance Loading:**\n"
         "Send a message with format: `username amount`\n"
         "Example: `juanperez98 2000`\n\n"
+        "**Bonus Deposit:**\n"
+        "Send a message with format: `username amount b<percentage>`\n"
+        "Example: `juan100 2000 b30` (loads 2000 + 30% bonus = 600 extra)\n\n"
         "**Examples:**\n"
         "• `juanperez98` (creates user)\n"
         "• `juanperez98 2000` (charges 2000 pesos to juanperez98)\n"
-        "• `maria123 500` (charges 500 pesos to maria123)\n\n"
+        "• `maria123 500` (charges 500 pesos to maria123)\n"
+        "• `juan100 2000 b30` (charges 2000 + 600 bonus chips)\n"
+        "• `player1 1000 b50` (charges 1000 + 500 bonus chips)\n\n"
         "**Commands:**\n"
         "• `/start` - Show welcome message\n"
         "• `/help` - Show this help\n"
@@ -131,6 +139,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "• All new users get the password: cocos\n"
         "• Browser session is saved to avoid re-login\n"
         "• All usernames and amounts should be in lowercase\n"
+        "• Bonus deposits are made as two separate transactions\n"
+        "• Bonus amount is calculated using floor(base_amount * percentage/100)\n"
         "• Multiple requests are processed concurrently for maximum speed",
         parse_mode='Markdown'
     )
@@ -174,7 +184,7 @@ async def clear_browser_context(update: Update, context: ContextTypes.DEFAULT_TY
         )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle all text messages - either user creation or balance charging."""
+    """Handle all text messages - either user creation, balance charging, or bonus deposit."""
     message_text = update.message.text.strip().lower()
     user_id = update.effective_user.id
     
@@ -183,9 +193,35 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     # Check if message contains space (indicating username + amount format)
     if ' ' in message_text:
-        # Balance charging format: "username amount"
         parts = message_text.split()
-        if len(parts) == 2:
+        
+        # Check for bonus deposit format: "username amount b<percentage>"
+        if len(parts) == 3 and parts[2].startswith('b') and parts[2][1:].isdigit():
+            username = parts[0]
+            try:
+                base_amount = int(parts[1])
+                bonus_percentage = int(parts[2][1:])  # Extract percentage from "b30" -> 30
+                
+                # Validate bonus percentage (reasonable range)
+                if bonus_percentage < 1 or bonus_percentage > 200:
+                    await update.message.reply_text(
+                        "❌ Invalid bonus percentage. Please use a value between 1 and 200.\n"
+                        "Example: `username 2000 b30` (30% bonus)"
+                    )
+                    return
+                
+                # Process bonus deposit concurrently
+                asyncio.create_task(charge_balance_with_bonus_concurrent(update, context, username, base_amount, bonus_percentage, operation_id))
+                return
+            except ValueError:
+                await update.message.reply_text(
+                    "❌ Invalid amount or bonus format. Please provide valid numbers.\n"
+                    "Example: `username 2000 b30`"
+                )
+                return
+                
+        # Regular balance charging format: "username amount"
+        elif len(parts) == 2:
             username = parts[0]
             try:
                 amount = int(parts[1])
@@ -202,7 +238,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await update.message.reply_text(
                 "❌ Invalid format. Use:\n"
                 "• `username` (to create user)\n"
-                "• `username amount` (to charge balance)"
+                "• `username amount` (to charge balance)\n"
+                "• `username amount b<percentage>` (to charge with bonus)"
             )
             return
     else:
@@ -333,6 +370,78 @@ async def charge_balance_concurrent(update: Update, context: ContextTypes.DEFAUL
                 
             await update.message.reply_text(
                 f"❌ **An error occurred while charging balance**\n\n"
+                f"**Error:** {str(e)}\n\n"
+                f"Please try again later.",
+                parse_mode='Markdown'
+            )
+    finally:
+        async with operation_lock:
+            active_operations.discard(operation_id)
+
+async def charge_balance_with_bonus_concurrent(update: Update, context: ContextTypes.DEFAULT_TYPE, username: str, base_amount: int, bonus_percentage: int, operation_id: str) -> None:
+    """Handle balance charging with bonus deposit - two separate transactions."""
+    async with operation_lock:
+        active_operations.add(operation_id)
+    
+    try:
+        # Calculate bonus amount using floor
+        bonus_amount = math.floor(base_amount * (bonus_percentage / 100))
+        
+        # Send processing message instantly
+        processing_message = await update.message.reply_text(
+            f"⚡ Loading {base_amount} chips + {bonus_percentage}% bonus to `{username}`...",
+            parse_mode='Markdown'
+        )
+        
+        try:
+            # First transaction: Base amount
+            success1, message1 = await assign_balance(username, base_amount)
+            
+            if not success1:
+                # Delete processing message
+                await processing_message.delete()
+                await update.message.reply_text(
+                    f"❌ **Failed to load base amount**\n\n"
+                    f"**Error:** {message1}\n\n"
+                    f"Please try again later.",
+                    parse_mode='Markdown'
+                )
+                return
+            
+            # Second transaction: Bonus amount
+            success2, message2 = await assign_balance(username, bonus_amount)
+            
+            # Delete processing message
+            await processing_message.delete()
+            
+            if success2:
+                # Both transactions successful
+                await update.message.reply_text(
+                    f"✅ {base_amount} chips loaded to {username}.\n"
+                    f"✅ {bonus_amount}‑chip bonus ({bonus_percentage}%) loaded.\n"
+                    f"Good luck!",
+                    parse_mode='Markdown'
+                )
+            else:
+                # Base succeeded but bonus failed
+                await update.message.reply_text(
+                    f"✅ {base_amount} chips loaded to {username}.\n"
+                    f"❌ **Bonus deposit failed:** {message2}\n\n"
+                    f"Base amount was loaded successfully, but bonus deposit encountered an error.",
+                    parse_mode='Markdown'
+                )
+                
+        except Exception as e:
+            logger.error(f"Error in bonus deposit: {e}")
+            
+            # Try to delete the processing message even if an error occurred
+            try:
+                await processing_message.delete()
+            except:
+                pass
+                
+            await update.message.reply_text(
+                f"❌ **An error occurred during bonus deposit**\n\n"
                 f"**Error:** {str(e)}\n\n"
                 f"Please try again later.",
                 parse_mode='Markdown'
