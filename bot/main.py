@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler, CallbackQueryHandler
 from browser_automation import create_user, assign_balance, cleanup_browser
+from sheets_logger import log_user_creation, log_chip_load, test_sheets_connection, get_operator_name
 from pathlib import Path
 
 # Load environment variables
@@ -85,6 +86,8 @@ async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     balance_url = os.getenv("BALANCE_URL")
     admin_user = os.getenv("ADMIN_USERNAME")
     admin_pass = os.getenv("ADMIN_PASSWORD")
+    sheets_id = os.getenv("GOOGLE_SHEETS_ID")
+    creds_path = os.getenv("GOOGLE_CREDENTIALS_PATH")
     
     debug_info = (
         f"🔧 **Debug Information**\n\n"
@@ -93,7 +96,9 @@ async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"• CREATE_USER_URL: {'✅ SET' if create_url else '❌ MISSING'}\n"
         f"• BALANCE_URL: {'✅ SET' if balance_url else '❌ MISSING'}\n"
         f"• ADMIN_USERNAME: {'✅ SET' if admin_user else '❌ MISSING'}\n"
-        f"• ADMIN_PASSWORD: {'✅ SET' if admin_pass else '❌ MISSING'}\n\n"
+        f"• ADMIN_PASSWORD: {'✅ SET' if admin_pass else '❌ MISSING'}\n"
+        f"• GOOGLE_SHEETS_ID: {'✅ SET' if sheets_id else '❌ MISSING'}\n"
+        f"• GOOGLE_CREDENTIALS_PATH: {'✅ SET' if creds_path else '❌ MISSING'}\n\n"
         f"**URLs (if set):**\n"
         f"• Login: `{admin_url[:50] + '...' if admin_url and len(admin_url) > 50 else admin_url or 'NOT SET'}`\n"
         f"• Create User: `{create_url[:50] + '...' if create_url and len(create_url) > 50 else create_url or 'NOT SET'}`\n"
@@ -104,6 +109,7 @@ async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"**Troubleshooting:**\n"
         f"• If environment variables are missing, check your `.env` file\n"
         f"• Use `/clear_context` to reset browser session if login fails\n"
+        f"• Use `/test_sheets` to test Google Sheets connection\n"
         f"• Check logs for detailed error messages"
     )
     
@@ -134,7 +140,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "• `/clear_context` - Clear saved browser session\n"
         "• `/status` - Show bot performance stats\n"
         "• `/debug` - Show troubleshooting information\n"
-        "• `/test_login` - Test platform login connectivity\n\n"
+        "• `/test_login` - Test platform login connectivity\n"
+        "• `/test_sheets` - Test Google Sheets logging connection\n\n"
         "**Notes:**\n"
         "• All new users get the password: cocos\n"
         "• Browser session is saved to avoid re-login\n"
@@ -286,6 +293,15 @@ async def create_new_user_concurrent(update: Update, context: ContextTypes.DEFAU
             await processing_message.delete()
             
             if success:
+                # Log to Google Sheets
+                try:
+                    operator = get_operator_name(update)
+                    await log_user_creation(username, operator)
+                    logger.info(f"User creation logged to Google Sheets: {username} by {operator}")
+                except Exception as e:
+                    logger.error(f"Failed to log user creation to Google Sheets: {e}")
+                    # Continue with success message even if logging fails
+                
                 # Create Spanish success message that can be copied easily
                 copyable_message = (
                     f"🔑Usuario: {username}\n"
@@ -346,6 +362,15 @@ async def charge_balance_concurrent(update: Update, context: ContextTypes.DEFAUL
             await processing_message.delete()
             
             if success:
+                # Log to Google Sheets
+                try:
+                    operator = get_operator_name(update)
+                    await log_chip_load(username, operator, amount, None, "normal")
+                    logger.info(f"Chip load logged to Google Sheets: {amount} to {username} by {operator}")
+                except Exception as e:
+                    logger.error(f"Failed to log chip load to Google Sheets: {e}")
+                    # Continue with success message even if logging fails
+                
                 await update.message.reply_text(
                     f"✅ **Balance charged successfully!**\n\n"
                     f"👤 User: `{username}`\n"
@@ -415,6 +440,18 @@ async def charge_balance_with_bonus_concurrent(update: Update, context: ContextT
             await processing_message.delete()
             
             if success2:
+                # Both transactions successful - log both to Google Sheets
+                try:
+                    operator = get_operator_name(update)
+                    # Log base amount
+                    await log_chip_load(username, operator, base_amount, None, "normal")
+                    # Log bonus amount
+                    await log_chip_load(username, operator, bonus_amount, bonus_percentage, "bonus")
+                    logger.info(f"Bonus deposit logged to Google Sheets: {base_amount} + {bonus_amount} bonus to {username} by {operator}")
+                except Exception as e:
+                    logger.error(f"Failed to log bonus deposit to Google Sheets: {e}")
+                    # Continue with success message even if logging fails
+                
                 # Both transactions successful
                 await update.message.reply_text(
                     f"✅ {base_amount} chips loaded to {username}.\n"
@@ -423,6 +460,16 @@ async def charge_balance_with_bonus_concurrent(update: Update, context: ContextT
                     parse_mode='Markdown'
                 )
             else:
+                # Base succeeded but bonus failed - log only the base amount
+                try:
+                    operator = get_operator_name(update)
+                    # Log only the successful base amount
+                    await log_chip_load(username, operator, base_amount, None, "normal")
+                    logger.info(f"Partial bonus deposit logged to Google Sheets: {base_amount} to {username} by {operator} (bonus failed)")
+                except Exception as e:
+                    logger.error(f"Failed to log partial bonus deposit to Google Sheets: {e}")
+                    # Continue with error message even if logging fails
+                
                 # Base succeeded but bonus failed
                 await update.message.reply_text(
                     f"✅ {base_amount} chips loaded to {username}.\n"
@@ -494,6 +541,41 @@ async def test_login_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             parse_mode='Markdown'
         )
 
+async def test_sheets_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Test Google Sheets connection."""
+    processing_message = await update.message.reply_text("🔍 Testing Google Sheets connection...")
+    
+    try:
+        success, message = await test_sheets_connection()
+        
+        if success:
+            await processing_message.edit_text(
+                f"✅ **Google Sheets test successful!**\n\n"
+                f"{message}\n\n"
+                f"The bot can log operations to Google Sheets.",
+                parse_mode='Markdown'
+            )
+        else:
+            await processing_message.edit_text(
+                f"❌ **Google Sheets test failed!**\n\n"
+                f"{message}\n\n"
+                f"Please check:\n"
+                f"• GOOGLE_SHEETS_ID environment variable\n"
+                f"• GOOGLE_CREDENTIALS_PATH environment variable\n"
+                f"• Google service account credentials file\n"
+                f"• Spreadsheet sharing permissions",
+                parse_mode='Markdown'
+            )
+            
+    except Exception as e:
+        logger.error(f"Error in Google Sheets test: {e}")
+        await processing_message.edit_text(
+            f"❌ **Google Sheets test error:**\n\n"
+            f"`{str(e)}`\n\n"
+            f"Check logs for detailed error information.",
+            parse_mode='Markdown'
+        )
+
 def signal_handler(sig, frame):
     """Handle shutdown signals"""
     logger.info("Received shutdown signal. Cleaning up...")
@@ -534,6 +616,7 @@ def main() -> None:
     application.add_handler(CommandHandler("clear_context", clear_browser_context))
     application.add_handler(CommandHandler("debug", debug_command))
     application.add_handler(CommandHandler("test_login", test_login_command))
+    application.add_handler(CommandHandler("test_sheets", test_sheets_command))
     
     # Add message handler for all text messages (not commands)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))

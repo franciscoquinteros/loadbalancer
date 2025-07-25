@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "balanceloader-467002",
+  "private_key_id": "4124a1ff41d8d458aad3ac6ce2c2815cc30932f1",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCdvlkd0G5w8smt\nDYeWse8R8mDbskJ6ots9MMxmP6c8CgosZXRhLHNxDreuT0xiXoGp1WDGt7uRoKHW\n8o48rSBJJQrUGjKx3FMm1Y5AcO2y9VDfRtO9INMCqgdmH8Z6ruJUjBYBmC7NA3sn\nOAjPvfPoN7lRrnk54m+4HFxBr/FKW12f5KeZRZ0NrqzI1CZznIxFtpdjjDD39Yhk\nKHmpEgnXFHmWZwqgK3KHUDFiap65n7iGab2XTXxxisXay+Mmvydrlew+wEGBMxcM\nHYX+1xbztmG/+wp2OLQtTVupxjPWUgFGYsIL+YsgvPuh/GxOZO9cqDslEs08mKvN\nl+teLIINAgMBAAECggEAB9UxGyYjqceghI+QrUayGpfIv/gCzZCjJs9ywtwDy5sr\nBKfYBtA8fj9vFwB4iETtlteR2eQ7M+DAUIpUTkaBfShR+JTBciwA1AOUL/Z7kyCT\nzrZ3YqOL3sy/F87ZnfNrqSuYlyUto7/5wEmLxHcH8r67nMb3XYy1I/UCjr90EY9S\nZbnA56qGzYYOtVBZ63dH1QuttLJeXu+hMnE0Szbkf2umytSKoeg0xfnKN41wgEne\nWwmoskfQewPNO8RsxipqKCtIizY+3vI3CtB46JMdJuBKNjLKqJvT3maWEqKWSRb1\nyPLy1kkPN7Z0FrGv5DhQHWaYzdMxrF2IO8rMvl27CQKBgQDR5MOucf0zcvMMq2nJ\nfnaoAJ2U/tNXyvA3yec55ldgQL6zTXLN/7U5NhdyH0La9/gPv1Mtp9zJJCL0yEiN\nCmgyQyWmDEVG72FXP9YqeNE7tQ0Pxl/HfkeIkQdtKX220/jKKT/Xk0tfxwY/ngqS\nSczf9XV996WAo9QseJJ/inSBZQKBgQDAZPUlVLfTgUubITTaAx19gYhDXKwtgHxY\no/paI9P++YB+SXp74OwDOEeKeE1Dv5ScVgseFxZU4HhCEjSgnssBJeL5AZYNnIfm\n7qKXzEUqPwomzsrEhSs/YIeUr6Cy/+4Kz+gwSgAAdLPb7DSDv3gxkRxXoBVUp8bU\ndoLA6UuHiQKBgQDMYOxmBdreaTTfhl3o9PqHVqoa9hNG7nYAbNp5l6BHOmQ25dg/\nXJnTTqd/2Y7Y9xIWC1/sGgMz3LspDYkPxS12m8miKVqf2uI2+hMJokFi2UYRsUF8\nWKtBAK9xjTA7gaZE++uNd4Cyj3K3KaXzkmcrQLEaarU+UMh+UR2dkW0mvQKBgA6A\njan+tMyQlm5fFmjIi1SGiwro1WGoqbbUxW49/SDfFbxvNXhY//FOMLZTUx+kNUOD\niNr/yoMjWG1Cig0BazPu8yjp4bGs9uGFY2Ql1aDVl6JNPCOMFjJ0yEOA6ZAUkpDm\nEw5wxYdDRLtzFpJHwHucAJLqUjFLZEVnmXuJGlRhAoGBAImcNMGyHapF9ZSUGvGa\nyvPczZ+WGNZjNXc+EgN0iwyx3r9gK8grbWRFDzjyqcU3MNY/dqNysZDaSwioxz9z\nJe72Bj/M6uTDCkcmsqzFFLEJcV5kh9Bk6HVn3QksokZ5GU0O2QKyQRE9KtGy9BCq\n19kqtaTlChCCh777jkwkR3HL\n-----END PRIVATE KEY-----\n",
+  "client_email": "balanceloader2025@balanceloader-467002.iam.gserviceaccount.com",
+  "client_id": "103233646183508026320",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/balanceloader2025%40balanceloader-467002.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
