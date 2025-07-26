@@ -99,6 +99,33 @@ async def save_browser_context():
     except Exception as e:
         logger.error(f"Error saving browser context: {e}")
 
+async def reset_browser_context():
+    """Reset browser context to handle corrupted or stale sessions"""
+    global _context
+    try:
+        logger.info("Resetting browser context due to login issues")
+        
+        # Close current context if it exists
+        if _context is not None:
+            await _context.close()
+            _context = None
+        
+        # Remove saved context file to force fresh start
+        context_file = BROWSER_CONTEXT_PATH / "state.json"
+        if context_file.exists():
+            context_file.unlink()
+            logger.info("Removed stale browser context file")
+        
+        # Create new context
+        if _browser is not None:
+            _context = await _browser.new_context()
+            logger.info("Created fresh browser context")
+        
+        return True
+    except Exception as e:
+        logger.error(f"Error resetting browser context: {e}")
+        return False
+
 async def is_logged_in(page):
     """Check if we're already logged in by looking for login-specific elements"""
     try:
@@ -106,10 +133,22 @@ async def is_logged_in(page):
         
         # Navigate to create user page to test access
         logger.info(f"Navigating to: {CREATE_USER_URL}")
-        await page.goto(CREATE_USER_URL, wait_until="domcontentloaded")
         
-        # Wait for page to fully load
-        await asyncio.sleep(0.5)
+        # Add retry logic for navigation in case of network issues
+        max_nav_attempts = 2
+        for attempt in range(max_nav_attempts):
+            try:
+                await page.goto(CREATE_USER_URL, wait_until="domcontentloaded", timeout=15000)
+                break
+            except Exception as nav_error:
+                if attempt == max_nav_attempts - 1:
+                    logger.error(f"Navigation failed after {max_nav_attempts} attempts: {nav_error}")
+                    return False
+                logger.warning(f"Navigation attempt {attempt + 1} failed: {nav_error}. Retrying...")
+                await asyncio.sleep(1.0)
+        
+        # Wait for page to fully load and stabilize
+        await asyncio.sleep(0.8)  # Increased from 0.5 for better stability
         
         # Check for login form (indicates not logged in)
         login_form = await page.query_selector('input[name="login"]')
@@ -137,6 +176,30 @@ async def is_logged_in(page):
             logger.info("Login status: on create user page but no form detected - assuming logged in")
             return True
         
+        # Additional check: look for common authentication failure indicators
+        auth_error_selectors = [
+            '.unauthorized',
+            '.auth-error', 
+            '.login-required',
+            '[data-testid="login-required"]',
+            '.error-401'
+        ]
+        
+        for selector in auth_error_selectors:
+            error_element = await page.query_selector(selector)
+            if error_element:
+                logger.info(f"Authentication error indicator found: {selector} - not logged in")
+                return False
+        
+        # Check page title for authentication indicators
+        try:
+            page_title = await page.title()
+            if page_title and any(word in page_title.lower() for word in ['login', 'sign in', 'authentication', 'unauthorized']):
+                logger.info(f"Page title indicates not logged in: {page_title}")
+                return False
+        except Exception:
+            pass
+        
         # Default to not logged in for safety
         logger.info("Login status unclear - assuming not logged in for safety")
         return False
@@ -149,99 +212,167 @@ async def is_logged_in(page):
 
 async def login_to_platform(page):
     """Login to the platform with admin credentials"""
-    try:
-        # First check if we're already logged in
-        if await is_logged_in(page):
-            logger.info("Already logged in, skipping login process")
-            return True
-        
-        logger.info("Not logged in, proceeding with login")
-        
-        # Validate environment variables
-        if not ADMIN_LOGIN_URL or not ADMIN_USERNAME or not ADMIN_PASSWORD:
-            logger.error("Missing login credentials in environment variables")
-            logger.error(f"ADMIN_LOGIN_URL: {'SET' if ADMIN_LOGIN_URL else 'MISSING'}")
-            logger.error(f"ADMIN_USERNAME: {'SET' if ADMIN_USERNAME else 'MISSING'}")
-            logger.error(f"ADMIN_PASSWORD: {'SET' if ADMIN_PASSWORD else 'MISSING'}")
-            return False
-        
-        # Navigate with moderate waiting for better reliability
-        logger.info(f"Navigating to login URL: {ADMIN_LOGIN_URL}")
-        await page.goto(ADMIN_LOGIN_URL, wait_until="domcontentloaded")
-        
-        # Wait a bit longer for login form to be ready
-        await asyncio.sleep(0.5)
-        
-        # Check if login form is present
-        login_input_present = await page.query_selector('input[name="login"]')
-        password_input_present = await page.query_selector('input[name="password"]')
-        submit_button_present = await page.query_selector('button[type="submit"]')
-        
-        if not login_input_present:
-            logger.error("Login input field not found on page")
-            return False
-        if not password_input_present:
-            logger.error("Password input field not found on page")
-            return False
-        if not submit_button_present:
-            logger.error("Submit button not found on page")
-            return False
-        
-        logger.info("Login form elements found, proceeding with form filling")
-        
-        # Use more reliable selector-based approach
+    max_login_attempts = 2
+    current_page = page
+    
+    for attempt in range(max_login_attempts):
         try:
-            # Fill login field
-            await page.fill('input[name="login"]', ADMIN_USERNAME)
-            await asyncio.sleep(0.1)
+            logger.info(f"Login attempt {attempt + 1}/{max_login_attempts}")
             
-            # Fill password field
-            await page.fill('input[name="password"]', ADMIN_PASSWORD)
-            await asyncio.sleep(0.1)
+            # First check if we're already logged in
+            if await is_logged_in(current_page):
+                logger.info("Already logged in, skipping login process")
+                return True, current_page
             
-            # Submit the form
-            await page.click('button[type="submit"]')
-            logger.info("Login form submitted")
+            logger.info("Not logged in, proceeding with login")
             
-        except Exception as e:
-            logger.error(f"Error filling login form: {e}")
-            return False
-        
-        # Wait for login processing with reasonable timeout
-        await asyncio.sleep(1.0)
-        
-        # Check for login success by looking for redirect or success indicators
-        try:
-            # Try navigating to create user page to test login
-            await page.goto(CREATE_USER_URL, wait_until="domcontentloaded")
+            # Validate environment variables
+            if not ADMIN_LOGIN_URL or not ADMIN_USERNAME or not ADMIN_PASSWORD:
+                logger.error("Missing login credentials in environment variables")
+                logger.error(f"ADMIN_LOGIN_URL: {'SET' if ADMIN_LOGIN_URL else 'MISSING'}")
+                logger.error(f"ADMIN_USERNAME: {'SET' if ADMIN_USERNAME else 'MISSING'}")
+                logger.error(f"ADMIN_PASSWORD: {'SET' if ADMIN_PASSWORD else 'MISSING'}")
+                return False, current_page
+            
+            # Navigate with moderate waiting for better reliability
+            logger.info(f"Navigating to login URL: {ADMIN_LOGIN_URL}")
+            await current_page.goto(ADMIN_LOGIN_URL, wait_until="domcontentloaded")
+            
+            # Wait a bit longer for login form to be ready
             await asyncio.sleep(0.5)
             
-            # Check if we can see user creation form (indicates successful login)
-            username_input = await page.query_selector('input[name="username"]')
-            if username_input:
-                # Save context in background
-                asyncio.create_task(save_browser_context())
-                logger.info("Login successful - user creation form accessible")
-                return True
-            else:
-                # Check if we're still on login page (indicates failed login)
-                login_form = await page.query_selector('input[name="login"]')
-                if login_form:
-                    logger.error("Login failed - still on login page")
-                    return False
+            # Check if login form is present
+            login_input_present = await current_page.query_selector('input[name="login"]')
+            password_input_present = await current_page.query_selector('input[name="password"]')
+            submit_button_present = await current_page.query_selector('button[type="submit"]')
+            
+            if not login_input_present:
+                logger.error("Login input field not found on page")
+                if attempt < max_login_attempts - 1:
+                    logger.info("Retrying with fresh context...")
+                    await current_page.close()
+                    await reset_browser_context()
+                    current_page = await (await get_browser_context()).new_page()
+                    continue
+                return False, current_page
+            if not password_input_present:
+                logger.error("Password input field not found on page")
+                if attempt < max_login_attempts - 1:
+                    logger.info("Retrying with fresh context...")
+                    await current_page.close()
+                    await reset_browser_context()
+                    current_page = await (await get_browser_context()).new_page()
+                    continue
+                return False, current_page
+            if not submit_button_present:
+                logger.error("Submit button not found on page")
+                if attempt < max_login_attempts - 1:
+                    logger.info("Retrying with fresh context...")
+                    await current_page.close()
+                    await reset_browser_context()
+                    current_page = await (await get_browser_context()).new_page()
+                    continue
+                return False, current_page
+            
+            logger.info("Login form elements found, proceeding with form filling")
+            
+            # Use more reliable selector-based approach with form clearing
+            try:
+                # Clear and fill login field - this prevents issues with cached/overlapping values
+                await current_page.fill('input[name="login"]', '')  # Clear first
+                await asyncio.sleep(0.1)
+                await current_page.fill('input[name="login"]', ADMIN_USERNAME)
+                await asyncio.sleep(0.1)
+                
+                # Clear and fill password field - this prevents issues with cached/overlapping values
+                await current_page.fill('input[name="password"]', '')  # Clear first
+                await asyncio.sleep(0.1)
+                await current_page.fill('input[name="password"]', ADMIN_PASSWORD)
+                await asyncio.sleep(0.1)
+                
+                # Submit the form
+                await current_page.click('button[type="submit"]')
+                logger.info("Login form submitted")
+                
+            except Exception as e:
+                logger.error(f"Error filling login form: {e}")
+                if attempt < max_login_attempts - 1:
+                    logger.info("Retrying with fresh context...")
+                    await current_page.close()
+                    await reset_browser_context()
+                    current_page = await (await get_browser_context()).new_page()
+                    continue
+                return False, current_page
+            
+            # Wait for login processing with reasonable timeout
+            await asyncio.sleep(1.5)  # Increased from 1.0 to 1.5 for more reliable processing
+            
+            # Check for login success by looking for redirect or success indicators
+            try:
+                # Try navigating to create user page to test login
+                await current_page.goto(CREATE_USER_URL, wait_until="domcontentloaded")
+                await asyncio.sleep(0.5)
+                
+                # Check if we can see user creation form (indicates successful login)
+                username_input = await current_page.query_selector('input[name="username"]')
+                if username_input:
+                    # Save context in background
+                    asyncio.create_task(save_browser_context())
+                    logger.info("Login successful - user creation form accessible")
+                    return True, current_page
                 else:
-                    logger.warning("Login status unclear - proceeding with caution")
-                    return True
-                    
+                    # Check if we're still on login page (indicates failed login)
+                    login_form = await current_page.query_selector('input[name="login"]')
+                    if login_form:
+                        logger.error(f"Login failed - still on login page (attempt {attempt + 1})")
+                        # Try to get error message if available
+                        try:
+                            error_element = await current_page.query_selector('.error, .alert, .notification-desktop_type_error')
+                            if error_element:
+                                error_text = await error_element.text_content()
+                                logger.error(f"Login error message: {error_text}")
+                        except Exception:
+                            pass
+                        
+                        # If this is not the last attempt, reset context and retry
+                        if attempt < max_login_attempts - 1:
+                            logger.info("Resetting browser context and retrying login...")
+                            await current_page.close()
+                            await reset_browser_context()
+                            current_page = await (await get_browser_context()).new_page()
+                            continue
+                        return False, current_page
+                    else:
+                        logger.warning("Login status unclear - proceeding with caution")
+                        return True, current_page
+                        
+            except Exception as e:
+                logger.error(f"Error checking login success: {e}")
+                if attempt < max_login_attempts - 1:
+                    logger.info("Retrying with fresh context...")
+                    await current_page.close()
+                    await reset_browser_context()
+                    current_page = await (await get_browser_context()).new_page()
+                    continue
+                return False, current_page
+            
         except Exception as e:
-            logger.error(f"Error checking login success: {e}")
-            return False
-        
-    except Exception as e:
-        logger.error(f"Error during login: {e}")
-        import traceback
-        logger.error(f"Login traceback: {traceback.format_exc()}")
-        return False
+            logger.error(f"Error during login attempt {attempt + 1}: {e}")
+            import traceback
+            logger.error(f"Login traceback: {traceback.format_exc()}")
+            
+            # If this is not the last attempt, reset context and retry
+            if attempt < max_login_attempts - 1:
+                logger.info("Resetting browser context and retrying login...")
+                await current_page.close()
+                await reset_browser_context()
+                current_page = await (await get_browser_context()).new_page()
+                continue
+            return False, current_page
+    
+    # If we've exhausted all attempts
+    logger.error(f"Login failed after {max_login_attempts} attempts")
+    return False, current_page
 
 async def create_user(username, password):
     """Create a new user on the platform"""
@@ -251,7 +382,7 @@ async def create_user(username, password):
         
         try:
             # Login to the platform (will skip if already logged in)
-            login_success = await login_to_platform(page)
+            login_success, page = await login_to_platform(page)
             if not login_success:
                 error_msg = "Failed to login to the platform"
                 logger.error(error_msg)
@@ -396,7 +527,7 @@ async def assign_balance(username, amount):
         
         try:
             # Login to the platform (will skip if already logged in)
-            login_success = await login_to_platform(page)
+            login_success, page = await login_to_platform(page)
             if not login_success:
                 error_msg = "Failed to login to the platform"
                 logger.error(error_msg)
