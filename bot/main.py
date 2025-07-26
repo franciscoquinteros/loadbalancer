@@ -9,6 +9,7 @@ import sys
 import re
 import asyncio
 import math
+import subprocess
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler, CallbackQueryHandler
@@ -175,43 +176,43 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     
     await update.message.reply_text(
-        "🆘 **Help - Balance Loader Bot**\n\n"
-        "**Authentication:**\n"
+        "🆘 Help - Balance Loader Bot\n\n"
+        "Authentication:\n"
         "• First-time users must enter the access password\n"
         "• Once authenticated, you can use all features\n"
         "• Authentication is saved and persistent\n\n"
-        "**User Creation:**\n"
+        "User Creation:\n"
         "Send any message with just a username to create a new user.\n"
-        "The bot will use the password: `cocos`\n\n"
-        "**Balance Loading:**\n"
-        "Send a message with format: `username amount`\n"
-        "Example: `juanperez98 2000`\n\n"
-        "**Bonus Deposit:**\n"
-        "Send a message with format: `username amount b<percentage>`\n"
-        "Example: `juan100 2000 b30` (loads 2000 + 30% bonus = 600 extra)\n\n"
-        "**Examples:**\n"
-        "• `juanperez98` (creates user)\n"
-        "• `juanperez98 2000` (charges 2000 pesos to juanperez98)\n"
-        "• `maria123 500` (charges 500 pesos to maria123)\n"
-        "• `juan100 2000 b30` (charges 2000 + 600 bonus chips)\n"
-        "• `player1 1000 b50` (charges 1000 + 500 bonus chips)\n\n"
-        "**Commands:**\n"
-        "• `/start` - Show welcome message\n"
-        "• `/help` - Show this help\n"
-        "• `/logout` - Remove authentication (requires re-authentication)\n"
-        "• `/clear_context` - Clear saved browser session\n"
-        "• `/status` - Show bot performance stats\n"
-        "• `/debug` - Show troubleshooting information\n"
-        "• `/test_login` - Test platform login connectivity\n"
-        "• `/test_sheets` - Test Google Sheets logging connection\n\n"
-        "**Notes:**\n"
+        "The bot will use the password: cocos\n\n"
+        "Balance Loading:\n"
+        "Send a message with format: username amount\n"
+        "Example: juanperez98 2000\n\n"
+        "Bonus Deposit:\n"
+        "Send a message with format: username amount b<percentage>\n"
+        "Example: juan100 2000 b30 (loads 2000 + 30% bonus = 600 extra)\n\n"
+        "Examples:\n"
+        "• juanperez98 (creates user)\n"
+        "• juanperez98 2000 (charges 2000 pesos to juanperez98)\n"
+        "• maria123 500 (charges 500 pesos to maria123)\n"
+        "• juan100 2000 b30 (charges 2000 + 600 bonus chips)\n"
+        "• player1 1000 b50 (charges 1000 + 500 bonus chips)\n\n"
+        "Commands:\n"
+        "• /start - Show welcome message\n"
+        "• /help - Show this help\n"
+        "• /logout - Remove authentication (requires re-authentication)\n"
+        "• /clear_context - Clear saved browser session\n"
+        "• /status - Show bot performance stats\n"
+        "• /debug - Show troubleshooting information\n"
+        "• /test_login - Test platform login connectivity\n"
+        "• /test_sheets - Test Google Sheets logging connection\n"
+        "• /restart - Restart the bot service\n\n"
+        "Notes:\n"
         "• All new users get the password: cocos\n"
         "• Browser session is saved to avoid re-login\n"
         "• All usernames and amounts should be in lowercase\n"
         "• Bonus deposits are made as two separate transactions\n"
         "• Bonus amount is calculated using floor(base_amount * percentage/100)\n"
-        "• Multiple requests are processed concurrently for maximum speed",
-        parse_mode='Markdown'
+        "• Multiple requests are processed concurrently for maximum speed"
     )
 
 async def logout_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -711,6 +712,44 @@ async def test_sheets_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             parse_mode='Markdown'
         )
 
+async def restart_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Restart the bot by restarting the systemd service."""
+    user_id = update.effective_user.id
+    
+    if not is_user_authenticated(user_id):
+        await request_authentication(update)
+        return
+    
+    try:
+        # Get the service name from the environment variable
+        service_name = os.getenv("TELEGRAM_BOT_SERVICE_NAME", "balanceloader.service")
+        
+        # Use systemctl to restart the service
+        subprocess.run(["sudo", "systemctl", "restart", service_name], check=True)
+        
+        await update.message.reply_text(
+            "✅ **Bot restarted successfully!**\n\n"
+            "The bot has been restarted. You can now use it again.",
+            parse_mode='Markdown'
+        )
+        logger.info(f"Bot restarted by user {user_id}")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Error restarting bot: {e}")
+        await update.message.reply_text(
+            f"❌ **Failed to restart bot:**\n\n"
+            f"`{e}`\n\n"
+            f"Please check the bot's service status and logs.",
+            parse_mode='Markdown'
+        )
+    except Exception as e:
+        logger.error(f"Error in restart_command: {e}")
+        await update.message.reply_text(
+            f"❌ **An unexpected error occurred during restart:**\n\n"
+            f"`{str(e)}`\n\n"
+            f"Please try again or check logs.",
+            parse_mode='Markdown'
+        )
+
 def signal_handler(sig, frame):
     """Handle shutdown signals"""
     logger.info("Received shutdown signal. Cleaning up...")
@@ -753,6 +792,7 @@ def main() -> None:
     application.add_handler(CommandHandler("debug", debug_command))
     application.add_handler(CommandHandler("test_login", test_login_command))
     application.add_handler(CommandHandler("test_sheets", test_sheets_command))
+    application.add_handler(CommandHandler("restart", restart_command)) # Add restart command handler
     
     # Add message handler for all text messages (not commands)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
