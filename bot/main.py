@@ -203,8 +203,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "• /clear_context - Clear saved browser session\n"
         "• /status - Show bot performance stats\n"
         "• /debug - Show troubleshooting information\n"
-        "• /test_login - Test platform login connectivity\n"
-        "• /test_sheets - Test Google Sheets logging connection\n"
         "• /restart - Restart the bot service\n\n"
         "Notes:\n"
         "• All new users get the password: cocos\n"
