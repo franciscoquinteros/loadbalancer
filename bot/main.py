@@ -27,7 +27,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Define conversation states
-AWAITING_USERNAME, AWAITING_BALANCE = range(2)
+AWAITING_USERNAME, AWAITING_BALANCE, AWAITING_PASSWORD = range(3)
 
 # File to store user contexts
 CONTEXT_FILE = 'user_contexts.json'
@@ -35,6 +35,9 @@ CONTEXT_FILE = 'user_contexts.json'
 # Concurrent operation tracking
 active_operations = set()
 operation_lock = asyncio.Lock()
+
+# Authentication password from environment
+AUTH_PASSWORD = os.getenv("BOT_AUTH_PASSWORD", "defaultpassword123")
 
 # Load user contexts from file or initialize empty dict
 def load_user_contexts():
@@ -62,10 +65,47 @@ def save_user_contexts(contexts):
 # Store user context
 user_contexts = load_user_contexts()
 
+def is_user_authenticated(user_id):
+    """Check if user is authenticated"""
+    return user_contexts.get(user_id, {}).get('authenticated', False)
+
+def authenticate_user(user_id, username):
+    """Mark user as authenticated"""
+    if user_id not in user_contexts:
+        user_contexts[user_id] = {}
+    user_contexts[user_id]['authenticated'] = True
+    user_contexts[user_id]['username'] = username
+    save_user_contexts(user_contexts)
+
+def verify_password(password):
+    """Verify if the provided password is correct"""
+    return password.strip() == AUTH_PASSWORD
+
+async def request_authentication(update: Update) -> None:
+    """Request authentication from user"""
+    await update.message.reply_text(
+        "🔐 **Authentication Required**\n\n"
+        "This bot requires authentication to use its services.\n"
+        "Please enter the access password:",
+        parse_mode='Markdown'
+    )
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
+    user_id = update.effective_user.id
+    
+    if not is_user_authenticated(user_id):
+        await update.message.reply_text(
+            "Welcome to the Balance Loader Bot! 👋\n\n"
+            "🔐 **Authentication Required**\n\n"
+            "To use this bot, you need to authenticate first.\n"
+            "Please enter the access password to continue.",
+            parse_mode='Markdown'
+        )
+        return
+    
     await update.message.reply_text(
-        "Welcome to the Balance Loader Bot! 👋\n\n"
+        "Welcome back to the Balance Loader Bot! 👋\n\n"
         "This bot automates user creation and balance loading on the platform.\n\n"
         "**How to use:**\n"
         "1. Send a username to create a new user\n"
@@ -80,6 +120,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show debug information for troubleshooting."""
+    user_id = update.effective_user.id
+    
+    if not is_user_authenticated(user_id):
+        await request_authentication(update)
+        return
+    
     # Get environment variables (without showing sensitive values)
     admin_url = os.getenv("ADMIN_LOGIN_URL")
     create_url = os.getenv("CREATE_USER_URL") 
@@ -117,8 +163,23 @@ async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /help is issued."""
+    user_id = update.effective_user.id
+    
+    if not is_user_authenticated(user_id):
+        await update.message.reply_text(
+            "🔐 **Authentication Required**\n\n"
+            "You need to authenticate before accessing help.\n"
+            "Please enter the access password to continue.",
+            parse_mode='Markdown'
+        )
+        return
+    
     await update.message.reply_text(
         "🆘 **Help - Balance Loader Bot**\n\n"
+        "**Authentication:**\n"
+        "• First-time users must enter the access password\n"
+        "• Once authenticated, you can use all features\n"
+        "• Authentication is saved and persistent\n\n"
         "**User Creation:**\n"
         "Send any message with just a username to create a new user.\n"
         "The bot will use the password: `cocos`\n\n"
@@ -137,6 +198,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "**Commands:**\n"
         "• `/start` - Show welcome message\n"
         "• `/help` - Show this help\n"
+        "• `/logout` - Remove authentication (requires re-authentication)\n"
         "• `/clear_context` - Clear saved browser session\n"
         "• `/status` - Show bot performance stats\n"
         "• `/debug` - Show troubleshooting information\n"
@@ -152,8 +214,33 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         parse_mode='Markdown'
     )
 
+async def logout_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Remove user authentication."""
+    user_id = update.effective_user.id
+    
+    if user_id in user_contexts:
+        user_contexts[user_id]['authenticated'] = False
+        save_user_contexts(user_contexts)
+        await update.message.reply_text(
+            "🔓 **Logged out successfully**\n\n"
+            "You will need to authenticate again to use the bot.\n"
+            "Send any message to enter your password.",
+            parse_mode='Markdown'
+        )
+    else:
+        await update.message.reply_text(
+            "ℹ️ You were not authenticated.",
+            parse_mode='Markdown'
+        )
+
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show bot performance and status information."""
+    user_id = update.effective_user.id
+    
+    if not is_user_authenticated(user_id):
+        await request_authentication(update)
+        return
+    
     active_count = len(active_operations)
     await update.message.reply_text(
         f"🚀 **Bot Status**\n\n"
@@ -167,6 +254,12 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def clear_browser_context(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Clear the saved browser context."""
+    user_id = update.effective_user.id
+    
+    if not is_user_authenticated(user_id):
+        await request_authentication(update)
+        return
+    
     try:
         # Clear the browser context
         await cleanup_browser()
@@ -190,14 +283,44 @@ async def clear_browser_context(update: Update, context: ContextTypes.DEFAULT_TY
             "❌ Error clearing browser context. Please try again later."
         )
 
+async def handle_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle password verification."""
+    user_id = update.effective_user.id
+    username = update.effective_user.username or update.effective_user.first_name or str(user_id)
+    password = update.message.text.strip()
+    
+    if verify_password(password):
+        authenticate_user(user_id, username)
+        await update.message.reply_text(
+            "✅ **Authentication successful!**\n\n"
+            "You now have access to the Balance Loader Bot.\n"
+            "Send /start to see available commands.",
+            parse_mode='Markdown'
+        )
+    else:
+        await update.message.reply_text(
+            "❌ **Invalid password**\n\n"
+            "Please try again with the correct access password.",
+            parse_mode='Markdown'
+        )
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle all text messages - either user creation, balance charging, or bonus deposit."""
-    message_text = update.message.text.strip().lower()
+    message_text = update.message.text.strip()
     user_id = update.effective_user.id
+    
+    # Check if user is authenticated
+    if not is_user_authenticated(user_id):
+        # Treat message as password attempt
+        await handle_password(update, context)
+        return
+    
+    # Process message as lowercase for bot operations
+    message_text = message_text.lower()
     
     # Create unique operation ID for tracking
     operation_id = f"{user_id}_{asyncio.get_event_loop().time()}"
-    
+
     # Check if message contains space (indicating username + amount format)
     if ' ' in message_text:
         parts = message_text.split()
@@ -499,6 +622,12 @@ async def charge_balance_with_bonus_concurrent(update: Update, context: ContextT
 
 async def test_login_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Test login functionality without performing any operations."""
+    user_id = update.effective_user.id
+    
+    if not is_user_authenticated(user_id):
+        await request_authentication(update)
+        return
+    
     from browser_automation import get_browser_context, login_to_platform
     
     processing_message = await update.message.reply_text("🔍 Testing login...")
@@ -543,6 +672,12 @@ async def test_login_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def test_sheets_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Test Google Sheets connection."""
+    user_id = update.effective_user.id
+    
+    if not is_user_authenticated(user_id):
+        await request_authentication(update)
+        return
+    
     processing_message = await update.message.reply_text("🔍 Testing Google Sheets connection...")
     
     try:
@@ -612,6 +747,7 @@ def main() -> None:
     # Add command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("logout", logout_command))
     application.add_handler(CommandHandler("status", status_command))
     application.add_handler(CommandHandler("clear_context", clear_browser_context))
     application.add_handler(CommandHandler("debug", debug_command))
