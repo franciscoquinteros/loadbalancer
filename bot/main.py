@@ -719,26 +719,27 @@ async def restart_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
     
     try:
-        # Get the service name from the environment variable
-        service_name = os.getenv("TELEGRAM_BOT_SERVICE_NAME", "balanceloader.service")
-        
-        # Use systemctl to restart the service
-        subprocess.run(["sudo", "systemctl", "restart", service_name], check=True)
-        
+        # Send confirmation message first
         await update.message.reply_text(
-            "✅ **Bot restarted successfully!**\n\n"
-            "The bot has been restarted. You can now use it again.",
+            "🔄 **Restarting bot...**\n\n"
+            "The bot will restart in a few seconds. Please wait.",
             parse_mode='Markdown'
         )
-        logger.info(f"Bot restarted by user {user_id}")
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Error restarting bot: {e}")
-        await update.message.reply_text(
-            f"❌ **Failed to restart bot:**\n\n"
-            f"`{e}`\n\n"
-            f"Please check the bot's service status and logs.",
-            parse_mode='Markdown'
-        )
+        
+        logger.info(f"Bot restart requested by user {user_id}")
+        
+        # Schedule restart after a short delay to allow message to be sent
+        async def delayed_restart():
+            await asyncio.sleep(2)  # Give time for message to be sent
+            try:
+                service_name = os.getenv("TELEGRAM_BOT_SERVICE_NAME", "balanceloader.service")
+                subprocess.run(["sudo", "systemctl", "restart", service_name], check=True)
+            except Exception as e:
+                logger.error(f"Error during delayed restart: {e}")
+        
+        # Schedule the restart to happen after responding
+        asyncio.create_task(delayed_restart())
+        
     except Exception as e:
         logger.error(f"Error in restart_command: {e}")
         await update.message.reply_text(
