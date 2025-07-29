@@ -428,9 +428,9 @@ async def create_new_user_concurrent(update: Update, context: ContextTypes.DEFAU
                 copyable_message = (
                     f"🔑Usuario: {username}\n"
                     f"🔒Contraseña: cocos\n\n"
-                    f"Enlace: https://cocosbet.com\n\n"
-                    f"Avisame cuando quieras cargar y te paso el CVU 💫\n\n"
-                    f"❗️ VA TODO EN MINÚSCULAS, INCLUYENDO LAS PRIMERAS LETRAS ❗️\n\n"
+                    f"❗️VA TODO EN MINÚSCULAS, INCLUYENDO LAS PRIMERAS LETRAS❗️\n\n"
+                    f"👉Enlace: https://cocosbet.com\n\n"
+                    f"Te dejo el CVU aqui abajo para cuando quieras cargar 👇\n\n"
                 )
                 
                 # Send the message in a code block to make it easily copyable
