@@ -3,3 +3,5 @@ playwright
 python-dotenv
 gspread
 google-auth
+fastapi
+uvicorn
