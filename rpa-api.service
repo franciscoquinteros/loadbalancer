@@ -4,13 +4,12 @@ After=network.target
 
 [Service]
 Type=simple
-User=your-username
-WorkingDirectory=/opt/balanceloader
-ExecStart=/opt/balanceloader/venv/bin/python run_api.py
+User=root
+WorkingDirectory=/home/balancebot/balanceloader
+ExecStart=/home/balancebot/balanceloader/venv/bin/python run_api.py
 Restart=on-failure
 RestartSec=10
 Environment=PYTHONUNBUFFERED=1
-Environment=RPA_API_HOST=127.0.0.1
 Environment=RPA_API_PORT=8001
 
 [Install]
