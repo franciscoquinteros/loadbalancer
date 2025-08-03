@@ -77,10 +77,19 @@ async def create_user_endpoint(request: UserCreationRequest):
                 logger.error(f"Failed to log user creation to Google Sheets: {e}")
                 # Continue with success response even if logging fails
             
+            # Create the same copyable message format as the Telegram bot
+            copyable_message = (
+                f"🔑Usuario: {request.candidate_username}\n"
+                f"🔒Contraseña: cocos\n\n"
+                f"❗️VA TODO EN MINÚSCULAS, INCLUYENDO LAS PRIMERAS LETRAS❗️\n\n"
+                f"👉Enlace: https://cocosbet.com\n\n"
+                f"Te dejo el CVU aqui abajo para cuando quieras cargar 👇\n\n"
+            )
+            
             response = UserCreationResponse(
                 status="success",
                 generated_username=request.candidate_username,
-                response_message=f"Usuario {request.candidate_username} creado exitosamente. Contraseña: cocos"
+                response_message=copyable_message
             )
             logger.info(f"User creation successful: {request.candidate_username}")
             return response
