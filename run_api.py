@@ -28,7 +28,7 @@ def main():
     """Start the RPA API server"""
     try:
         # Get configuration from environment
-        host = os.getenv("RPA_API_HOST", "127.0.0.1")
+        host = os.getenv("RPA_API_HOST", "0.0.0.0")  # Listen on all interfaces for external access
         port = int(os.getenv("RPA_API_PORT", 8001))
         
         logger.info("=" * 50)
