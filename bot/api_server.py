@@ -30,10 +30,10 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Add CORS middleware for local communication
+# Add CORS middleware for external access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8080", "http://127.0.0.1:8080"],
+    allow_origins=["*"],  # Allow all origins for external access
     allow_credentials=True,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
@@ -151,7 +151,7 @@ if __name__ == "__main__":
     
     # Get port from environment or default to 8001
     port = int(os.getenv("RPA_API_PORT", 8001))
-    host = os.getenv("RPA_API_HOST", "127.0.0.1")
+    host = os.getenv("RPA_API_HOST", "0.0.0.0")  # Listen on all interfaces for external access
     
     logger.info(f"Starting RPA API server on {host}:{port}")
     

@@ -4,9 +4,9 @@ After=network.target
 
 [Service]
 Type=simple
-User=your-username
-WorkingDirectory=/opt/balanceloader
-ExecStart=/opt/balanceloader/venv/bin/python -m bot.main
+User=root
+WorkingDirectory=/home/balancebot/balanceloader
+ExecStart=/home/balancebot/balanceloader/venv/bin/python bot/main.py
 Restart=on-failure
 RestartSec=10
 Environment=PYTHONUNBUFFERED=1
