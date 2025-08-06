@@ -21,6 +21,31 @@ class UserCreationResponse(BaseModel):
     error_detail: Optional[str] = None
 
 
+class BalanceLoadRequest(BaseModel):
+    """Request model for balance loading API (without bonus)"""
+    conversation_id: str
+    username: str
+    amount: int
+
+
+class BalanceLoadBonusRequest(BaseModel):
+    """Request model for balance loading API (with bonus)"""
+    conversation_id: str
+    username: str
+    amount: int
+    bonus_percentage: int
+
+
+class BalanceLoadResponse(BaseModel):
+    """Response model for balance loading API"""
+    status: str  # "success", "error"
+    username: Optional[str] = None
+    amount_loaded: Optional[int] = None
+    bonus_amount: Optional[int] = None
+    response_message: str
+    error_detail: Optional[str] = None
+
+
 class HealthResponse(BaseModel):
     """Response model for health check"""
     status: str

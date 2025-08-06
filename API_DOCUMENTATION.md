@@ -132,6 +132,113 @@ Creates a new user account via browser automation.
 }
 ```
 
+### POST /api/load-balance
+
+Loads balance to an existing user account without bonus.
+
+**Request Body:**
+
+```json
+{
+  "conversation_id": "12345",
+  "username": "sofia1234",
+  "amount": 2000
+}
+```
+
+**Request Fields:**
+
+- `conversation_id` (string): Unique identifier for the conversation/request
+- `username` (string): Username of the account to load balance to
+- `amount` (integer): Amount in pesos to load to the account
+
+**Response - Success:**
+
+```json
+{
+  "status": "success",
+  "username": "sofia1234",
+  "amount_loaded": 2000,
+  "bonus_amount": null,
+  "response_message": "Successfully loaded 2000 pesos to sofia1234",
+  "error_detail": null
+}
+```
+
+**Response - Error:**
+
+```json
+{
+  "status": "error",
+  "username": "sofia1234",
+  "amount_loaded": null,
+  "bonus_amount": null,
+  "response_message": "Balance loading failed",
+  "error_detail": "User not found or system error"
+}
+```
+
+### POST /api/load-balance-bonus
+
+Loads balance to an existing user account with bonus percentage.
+
+**Request Body:**
+
+```json
+{
+  "conversation_id": "12345",
+  "username": "sofia1234",
+  "amount": 2000,
+  "bonus_percentage": 30
+}
+```
+
+**Request Fields:**
+
+- `conversation_id` (string): Unique identifier for the conversation/request
+- `username` (string): Username of the account to load balance to
+- `amount` (integer): Base amount in pesos to load to the account
+- `bonus_percentage` (integer): Bonus percentage (1-200) to add to the base amount
+
+**Response - Success:**
+
+```json
+{
+  "status": "success",
+  "username": "sofia1234",
+  "amount_loaded": 2000,
+  "bonus_amount": 600,
+  "response_message": "Successfully loaded 2000 pesos + 600 bonus pesos (30%) to sofia1234",
+  "error_detail": null
+}
+```
+
+**Response - Partial Success:**
+
+```json
+{
+  "status": "error",
+  "username": "sofia1234",
+  "amount_loaded": 2000,
+  "bonus_amount": null,
+  "response_message": "Base amount loaded but bonus failed",
+  "error_detail": "Base amount (2000) was loaded successfully, but bonus loading failed: System error"
+}
+```
+
+**Response - Error:**
+
+```json
+{
+  "status": "error",
+  "username": "sofia1234",
+  "amount_loaded": null,
+  "bonus_amount": null,
+  "response_message": "Failed to load base amount",
+  "error_detail": "User not found or system error"
+}
+```
+
 ### GET /health
 
 Health check endpoint for monitoring.
@@ -159,6 +266,8 @@ Root endpoint with service information.
   "version": "1.0.0",
   "endpoints": {
     "create_user": "/api/create-user",
+    "load_balance": "/api/load-balance",
+    "load_balance_bonus": "/api/load-balance-bonus",
     "health": "/health"
   }
 }

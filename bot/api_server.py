@@ -4,14 +4,15 @@
 import os
 import logging
 import asyncio
+import math
 from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-from api_models import UserCreationRequest, UserCreationResponse, HealthResponse
-from browser_automation import create_user
-from sheets_logger import log_user_creation
+from api_models import UserCreationRequest, UserCreationResponse, HealthResponse, BalanceLoadRequest, BalanceLoadBonusRequest, BalanceLoadResponse
+from browser_automation import create_user, assign_balance
+from sheets_logger import log_user_creation, log_chip_load
 
 # Load environment variables
 load_dotenv()
@@ -127,6 +128,177 @@ async def create_user_endpoint(request: UserCreationRequest):
         return response
 
 
+@app.post("/api/load-balance", response_model=BalanceLoadResponse)
+async def load_balance_endpoint(request: BalanceLoadRequest):
+    """
+    Load balance to a user (without bonus)
+    
+    This endpoint loads a specified amount to a user's account
+    without any bonus additions.
+    """
+    try:
+        logger.info(f"Balance load request received: conversation_id={request.conversation_id}, "
+                   f"username={request.username}, amount={request.amount}")
+        
+        # Call the existing browser automation function
+        success, message = await assign_balance(request.username, request.amount)
+        
+        if success:
+            # Log successful balance load to Google Sheets
+            try:
+                await log_chip_load(
+                    username=request.username,
+                    operator=f"api_bot_{request.conversation_id}",
+                    amount=request.amount,
+                    bonus_percentage=None,
+                    load_type="normal"
+                )
+                logger.info(f"Balance load logged to Google Sheets: {request.amount} to {request.username}")
+            except Exception as e:
+                logger.error(f"Failed to log balance load to Google Sheets: {e}")
+                # Continue with success response even if logging fails
+            
+            response = BalanceLoadResponse(
+                status="success",
+                username=request.username,
+                amount_loaded=request.amount,
+                response_message=f"Successfully loaded {request.amount} pesos to {request.username}"
+            )
+            logger.info(f"Balance load successful: {request.amount} to {request.username}")
+            return response
+        
+        else:
+            # Balance loading failed
+            response = BalanceLoadResponse(
+                status="error",
+                username=request.username,
+                response_message="Balance loading failed",
+                error_detail=message
+            )
+            logger.error(f"Balance load failed: {request.username} - {message}")
+            return response
+                
+    except Exception as e:
+        logger.error(f"API error loading balance to {request.username}: {str(e)}")
+        response = BalanceLoadResponse(
+            status="error",
+            username=request.username,
+            response_message="Internal server error",
+            error_detail=f"Unexpected error: {str(e)}"
+        )
+        return response
+
+
+@app.post("/api/load-balance-bonus", response_model=BalanceLoadResponse)
+async def load_balance_bonus_endpoint(request: BalanceLoadBonusRequest):
+    """
+    Load balance to a user with bonus
+    
+    This endpoint loads a specified base amount plus a bonus percentage
+    to a user's account. The bonus is calculated and added as a separate transaction.
+    """
+    try:
+        logger.info(f"Balance load with bonus request received: conversation_id={request.conversation_id}, "
+                   f"username={request.username}, amount={request.amount}, bonus={request.bonus_percentage}%")
+        
+        # Validate bonus percentage range
+        if request.bonus_percentage < 1 or request.bonus_percentage > 200:
+            response = BalanceLoadResponse(
+                status="error",
+                username=request.username,
+                response_message="Invalid bonus percentage",
+                error_detail="Bonus percentage must be between 1 and 200"
+            )
+            return response
+        
+        # Calculate bonus amount using floor (same as Telegram bot)
+        bonus_amount = math.floor(request.amount * (request.bonus_percentage / 100))
+        
+        # First transaction: Base amount
+        success1, message1 = await assign_balance(request.username, request.amount)
+        
+        if not success1:
+            response = BalanceLoadResponse(
+                status="error",
+                username=request.username,
+                response_message="Failed to load base amount",
+                error_detail=message1
+            )
+            logger.error(f"Base amount load failed: {request.username} - {message1}")
+            return response
+        
+        # Second transaction: Bonus amount
+        success2, message2 = await assign_balance(request.username, bonus_amount)
+        
+        if success2:
+            # Both transactions successful - log both to Google Sheets
+            try:
+                operator = f"api_bot_{request.conversation_id}"
+                # Log base amount
+                await log_chip_load(
+                    username=request.username,
+                    operator=operator,
+                    amount=request.amount,
+                    bonus_percentage=None,
+                    load_type="normal"
+                )
+                # Log bonus amount
+                await log_chip_load(
+                    username=request.username,
+                    operator=operator,
+                    amount=bonus_amount,
+                    bonus_percentage=request.bonus_percentage,
+                    load_type="bonus"
+                )
+                logger.info(f"Bonus load logged to Google Sheets: {request.amount} + {bonus_amount} bonus to {request.username}")
+            except Exception as e:
+                logger.error(f"Failed to log bonus load to Google Sheets: {e}")
+                # Continue with success response even if logging fails
+            
+            response = BalanceLoadResponse(
+                status="success",
+                username=request.username,
+                amount_loaded=request.amount,
+                bonus_amount=bonus_amount,
+                response_message=f"Successfully loaded {request.amount} pesos + {bonus_amount} bonus pesos ({request.bonus_percentage}%) to {request.username}"
+            )
+            logger.info(f"Bonus load successful: {request.amount} + {bonus_amount} bonus to {request.username}")
+            return response
+        
+        else:
+            # Base succeeded but bonus failed - log only the base amount
+            try:
+                await log_chip_load(
+                    username=request.username,
+                    operator=f"api_bot_{request.conversation_id}",
+                    amount=request.amount,
+                    bonus_percentage=None,
+                    load_type="normal"
+                )
+            except Exception as e:
+                logger.error(f"Failed to log partial bonus load to Google Sheets: {e}")
+            
+            response = BalanceLoadResponse(
+                status="error",
+                username=request.username,
+                amount_loaded=request.amount,
+                response_message=f"Base amount loaded but bonus failed",
+                error_detail=f"Base amount ({request.amount}) was loaded successfully, but bonus loading failed: {message2}"
+            )
+            logger.warning(f"Partial bonus load: {request.username} - base succeeded, bonus failed: {message2}")
+            return response
+                
+    except Exception as e:
+        logger.error(f"API error loading bonus balance to {request.username}: {str(e)}")
+        response = BalanceLoadResponse(
+            status="error",
+            username=request.username,
+            response_message="Internal server error",
+            error_detail=f"Unexpected error: {str(e)}"
+        )
+        return response
+
+
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """
@@ -150,6 +322,8 @@ async def root():
         "version": "1.0.0",
         "endpoints": {
             "create_user": "/api/create-user",
+            "load_balance": "/api/load-balance",
+            "load_balance_bonus": "/api/load-balance-bonus",
             "health": "/health"
         }
     }
