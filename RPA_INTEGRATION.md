@@ -115,7 +115,7 @@ RPA Bot → Browser Automation → Target Platform
 2. **Browser Automation** launches headless Chrome
 3. **Platform Login** using admin credentials
 4. **Navigate** to user creation form
-5. **Fill Form** with username and password ("cocos")
+5. **Fill Form** with username and password ("cocos1")
 6. **Submit** form and wait for response
 7. **Parse Result** from platform (success/error/conflict)
 
@@ -128,7 +128,7 @@ RPA Bot → Browser Automation → Target Platform
 {
     "status": "success",
     "generated_username": "sofia1234",
-    "response_message": "Usuario sofia1234 creado exitosamente. Contraseña: cocos"
+    "response_message": "Usuario sofia1234 creado exitosamente. Contraseña: cocos1"
 }
 
 # CONFLICT (username exists)
@@ -240,7 +240,7 @@ app = FastAPI()
 async def create_user_endpoint(request: UserCreationRequest):
     success, message = await create_user(
         username=request.candidate_username,
-        password="cocos"  # Fixed password
+        password="cocos1"  # Fixed password
     )
 
     if success:

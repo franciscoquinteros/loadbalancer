@@ -105,7 +105,7 @@ Creates a new user account via browser automation.
 {
   "status": "success",
   "generated_username": "sofia1234",
-  "response_message": "Usuario sofia1234 creado exitosamente. Contraseña: cocos",
+  "response_message": "Usuario sofia1234 creado exitosamente. Contraseña: cocos1",
   "error_detail": null
 }
 ```
@@ -405,7 +405,7 @@ cd /opt/balanceloader
 python -c "
 from bot.browser_automation import create_user
 import asyncio
-result = asyncio.run(create_user('testuser123', 'cocos'))
+result = asyncio.run(create_user('testuser123', 'cocos1'))
 print(result)
 "
 ```

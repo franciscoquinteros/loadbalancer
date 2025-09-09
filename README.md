@@ -14,7 +14,7 @@ A high-speed automation system that provides user creation and balance assignmen
 #### Via Telegram Bot:
 
 1. An operator sends a username to the Telegram bot (e.g., `juanperez98`)
-2. The bot automatically creates a new user with the provided username and password `cocos`
+2. The bot automatically creates a new user with the provided username and password `cocos1`
 3. Sends a Spanish confirmation message that can be easily copied and pasted
 
 #### Via HTTP API:
@@ -137,7 +137,7 @@ Tu usuario ha sido creado 🍀
 ———
 
 🔑Usuario: juanperez98
-🔒Contraseña: cocos
+🔒Contraseña: cocos1
 
 Enlace: https://cocosbet.com
 
@@ -167,7 +167,7 @@ Response:
 {
   "status": "success",
   "generated_username": "juanperez98",
-  "response_message": "Usuario juanperez98 creado exitosamente. Contraseña: cocos"
+  "response_message": "Usuario juanperez98 creado exitosamente. Contraseña: cocos1"
 }
 ```
 
@@ -195,7 +195,7 @@ Target performance: 5x faster than human operators
 ## Rules
 
 - All usernames must be lowercase with only letters, numbers, and underscores
-- All users get the password: `cocos`
+- All users get the password: `cocos1`
 - No confirmation dialogs - operations execute immediately
 - Simple format: `username` for creation, `username amount` for charging
 

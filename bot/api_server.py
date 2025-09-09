@@ -64,7 +64,7 @@ async def create_user_endpoint(request: UserCreationRequest):
                    f"username={request.candidate_username}, attempt={request.attempt_number}")
         
         # Call the existing browser automation function
-        success, message = await create_user(request.candidate_username, "cocos")
+        success, message = await create_user(request.candidate_username, "cocos1")
         
         if success:
             # Log successful creation to Google Sheets
@@ -81,7 +81,7 @@ async def create_user_endpoint(request: UserCreationRequest):
             # Create the same copyable message format as the Telegram bot
             copyable_message = (
                 f"🔑Usuario: {request.candidate_username}\n"
-                f"🔒Contraseña: cocos\n\n"
+                f"🔒Contraseña: cocos1\n\n"
                 f"❗️VA TODO EN MINÚSCULAS, INCLUYENDO LAS PRIMERAS LETRAS❗️\n\n"
                 f"👉Enlace: https://cocosbet.com\n\n"
                 f"Te dejo el CVU aqui abajo para cuando quieras cargar 👇\n\n"
