@@ -43,6 +43,10 @@ app.add_middleware(
 # Optional API key from environment
 API_KEY = os.getenv("RPA_BOT_API_KEY")
 
+# Platform configuration
+PLATFORM_URL = os.getenv("PLATFORM_URL", "https://yourplatform.com")
+PLATFORM_NAME = os.getenv("PLATFORM_NAME", "YourPlatform")
+
 
 def verify_api_key(request_api_key: str = None) -> bool:
     """Verify API key if configured"""
@@ -64,7 +68,7 @@ async def create_user_endpoint(request: UserCreationRequest):
                    f"username={request.candidate_username}, attempt={request.attempt_number}")
         
         # Call the existing browser automation function
-        success, message = await create_user(request.candidate_username, "cocos1")
+        success, message = await create_user(request.candidate_username, "Roma123")
         
         if success:
             # Log successful creation to Google Sheets
@@ -81,9 +85,9 @@ async def create_user_endpoint(request: UserCreationRequest):
             # Create the same copyable message format as the Telegram bot
             copyable_message = (
                 f"🔑Usuario: {request.candidate_username}\n"
-                f"🔒Contraseña: cocos1\n\n"
+                f"🔒Contraseña: Roma123\n\n"
                 f"❗️VA TODO EN MINÚSCULAS, INCLUYENDO LAS PRIMERAS LETRAS❗️\n\n"
-                f"👉Enlace: https://cocosbet.com\n\n"
+                f"👉Enlace: {PLATFORM_URL}\n\n"
                 f"Te dejo el CVU aqui abajo para cuando quieras cargar 👇\n\n"
             )
             

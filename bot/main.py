@@ -40,6 +40,10 @@ operation_lock = asyncio.Lock()
 # Authentication password from environment
 AUTH_PASSWORD = os.getenv("BOT_AUTH_PASSWORD", "defaultpassword123")
 
+# Platform configuration
+PLATFORM_URL = os.getenv("PLATFORM_URL", "https://yourplatform.com")
+PLATFORM_NAME = os.getenv("PLATFORM_NAME", "YourPlatform")
+
 # Load user contexts from file or initialize empty dict
 def load_user_contexts():
     try:
@@ -183,7 +187,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "• Authentication is saved and persistent\n\n"
         "User Creation:\n"
         "Send any message with just a username to create a new user.\n"
-        "The bot will use the password: cocos1\n\n"
+        "The bot will use the password: Roma123\n\n"
         "Balance Loading:\n"
         "Send a message with format: username amount\n"
         "Example: juanperez98 2000\n\n"
@@ -205,7 +209,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "• /debug - Show troubleshooting information\n"
         "• /restart - Restart the bot service\n\n"
         "Notes:\n"
-        "• All new users get the password: cocos1\n"
+        "• All new users get the password: Roma123\n"
         "• Browser session is saved to avoid re-login\n"
         "• All usernames and amounts should be in lowercase\n"
         "• Bonus deposits are made as two separate transactions\n"
@@ -399,7 +403,7 @@ async def create_new_user_concurrent(update: Update, context: ContextTypes.DEFAU
     
     try:
         # Fixed password as per requirements
-        password = "cocos1"
+        password = "Roma123"
         
         # Send processing message instantly
         processing_message = await update.message.reply_text(
@@ -427,9 +431,9 @@ async def create_new_user_concurrent(update: Update, context: ContextTypes.DEFAU
                 # Create Spanish success message that can be copied easily
                 copyable_message = (
                     f"🔑Usuario: {username}\n"
-                    f"🔒Contraseña: cocos1\n\n"
+                    f"🔒Contraseña: Roma123\n\n"
                     f"❗️VA TODO EN MINÚSCULAS, INCLUYENDO LAS PRIMERAS LETRAS❗️\n\n"
-                    f"👉Enlace: https://cocosbet.com\n\n"
+                    f"👉Enlace: {PLATFORM_URL}\n\n"
                     f"Te dejo el CVU aqui abajo para cuando quieras cargar 👇\n\n"
                 )
                 

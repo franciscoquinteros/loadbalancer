@@ -151,13 +151,13 @@ async def is_logged_in(page):
         await asyncio.sleep(0.8)  # Increased from 0.5 for better stability
         
         # Check for login form (indicates not logged in)
-        login_form = await page.query_selector('input[name="login"]')
+        login_form = await page.query_selector('input[type="text"][placeholder="Nombre"]')
         if login_form:
             logger.info("Not logged in - login form detected")
             return False
         
         # Check for user creation form (indicates logged in)
-        username_input = await page.query_selector('input[name="username"]')
+        username_input = await page.query_selector('input[type="text"][placeholder="Nombre de usuario"]')
         if username_input:
             logger.info("Already logged in - user creation form detected")
             return True
@@ -242,9 +242,9 @@ async def login_to_platform(page):
             await asyncio.sleep(0.5)
             
             # Check if login form is present
-            login_input_present = await current_page.query_selector('input[name="login"]')
-            password_input_present = await current_page.query_selector('input[name="password"]')
-            submit_button_present = await current_page.query_selector('button[type="submit"]')
+            login_input_present = await current_page.query_selector('input[type="text"][placeholder="Nombre"]')
+            password_input_present = await current_page.query_selector('input[type="password"]')
+            submit_button_present = await current_page.query_selector('button:has-text("Acceder")')
             
             if not login_input_present:
                 logger.error("Login input field not found on page")
@@ -279,19 +279,19 @@ async def login_to_platform(page):
             # Use more reliable selector-based approach with form clearing
             try:
                 # Clear and fill login field - this prevents issues with cached/overlapping values
-                await current_page.fill('input[name="login"]', '')  # Clear first
+                await current_page.fill('input[type="text"][placeholder="Nombre"]', '')  # Clear first
                 await asyncio.sleep(0.1)
-                await current_page.fill('input[name="login"]', ADMIN_USERNAME)
+                await current_page.fill('input[type="text"][placeholder="Nombre"]', ADMIN_USERNAME)
                 await asyncio.sleep(0.1)
-                
+
                 # Clear and fill password field - this prevents issues with cached/overlapping values
-                await current_page.fill('input[name="password"]', '')  # Clear first
+                await current_page.fill('input[type="password"]', '')  # Clear first
                 await asyncio.sleep(0.1)
-                await current_page.fill('input[name="password"]', ADMIN_PASSWORD)
-                await asyncio.sleep(0.1)
-                
-                # Submit the form
-                await current_page.click('button[type="submit"]')
+                await current_page.fill('input[type="password"]', ADMIN_PASSWORD)
+                await asyncio.sleep(0.5)  # Wait for button to enable
+
+                # Submit the form - wait for button to be enabled
+                await current_page.click('button:has-text("Acceder"):not([disabled])')
                 logger.info("Login form submitted")
                 
             except Exception as e:
@@ -314,7 +314,7 @@ async def login_to_platform(page):
                 await asyncio.sleep(0.5)
                 
                 # Check if we can see user creation form (indicates successful login)
-                username_input = await current_page.query_selector('input[name="username"]')
+                username_input = await current_page.query_selector('input[type="text"][placeholder="Nombre de usuario"]')
                 if username_input:
                     # Save context in background
                     asyncio.create_task(save_browser_context())
@@ -322,7 +322,7 @@ async def login_to_platform(page):
                     return True, current_page
                 else:
                     # Check if we're still on login page (indicates failed login)
-                    login_form = await current_page.query_selector('input[name="login"]')
+                    login_form = await current_page.query_selector('input[type="text"][placeholder="Nombre"]')
                     if login_form:
                         logger.error(f"Login failed - still on login page (attempt {attempt + 1})")
                         # Try to get error message if available
@@ -395,30 +395,50 @@ async def create_user(username, password):
             await asyncio.sleep(0.5)
             
             # Check if form elements are present
-            username_input = await page.query_selector('input[name="username"]')
+            username_input = await page.query_selector('input[type="text"][placeholder="Nombre de usuario"]')
             password_input = await page.query_selector('input[name="password"]')
-            password2_input = await page.query_selector('input[name="password2"]')
+            password2_input = await page.query_selector('input[name="confirmPassword"]')
             submit_button = await page.query_selector('button[type="submit"]')
-            
+
             if not username_input or not password_input or not password2_input or not submit_button:
                 error_msg = "User creation form elements not found on page"
                 logger.error(error_msg)
                 return False, error_msg
-            
+
             logger.info(f"Creating user {username} with form submission")
-            
+
             # Fill form fields
-            await page.fill('input[name="username"]', username)
+            await page.fill('input[type="text"][placeholder="Nombre de usuario"]', username)
             await asyncio.sleep(0.1)
             await page.fill('input[name="password"]', password)
             await asyncio.sleep(0.1)
-            await page.fill('input[name="password2"]', password)
+            await page.fill('input[name="confirmPassword"]', password)
             await asyncio.sleep(0.1)
             
             # Submit the form
             await page.click('button[type="submit"]')
-            logger.info("User creation form submitted, waiting for confirmation...")
-            
+            logger.info("User creation form submitted, waiting for confirmation modal...")
+
+            # Wait for confirmation modal to appear
+            await asyncio.sleep(0.5)
+
+            # Click the confirmation button in the modal
+            try:
+                modal_button = await page.wait_for_selector(
+                    'button[type="button"].button.button_sizable_low.button_colors_transparent',
+                    timeout=5000,
+                    state='visible'
+                )
+                if modal_button:
+                    logger.info("Confirmation modal found, clicking 'Crear jugador' button...")
+                    await modal_button.click()
+                    logger.info("Confirmation button clicked, waiting for result...")
+                else:
+                    logger.warning("Confirmation modal button not found")
+            except Exception as e:
+                logger.error(f"Error clicking confirmation modal button: {e}")
+                return False, f"Failed to confirm user creation: {str(e)}"
+
             # Wait for and check toast notifications with extended timeout
             success = False
             error_message = None
@@ -427,49 +447,36 @@ async def create_user(username, password):
                 # Wait longer for notifications to appear (some sites take time)
                 logger.info("Waiting for toast notification...")
                 notification = await page.wait_for_selector(
-                    '.notification-desktop.notification-desktop_type_error, .notification-desktop.notification-desktop_type_success',
-                    timeout=10000  # Wait up to 10 seconds for notification
+                    '.notification__text',
+                    timeout=10000,  # Wait up to 10 seconds for notification
+                    state='visible'
                 )
                 
                 if notification:
-                    logger.info("Toast notification found, checking type...")
-                    
-                    # Check if it's an error notification
-                    is_error = await notification.evaluate('element => element.classList.contains("notification-desktop_type_error")')
-                    is_success = await notification.evaluate('element => element.classList.contains("notification-desktop_type_success")')
-                    
+                    logger.info("Toast notification found, checking text...")
+
                     # Get the notification message text
-                    text_element = await notification.query_selector('.notification-desktop__text')
-                    if text_element:
-                        notification_text = await text_element.text_content()
-                        logger.info(f"Toast notification text: {notification_text}")
-                        
-                        if is_error:
+                    notification_text = await notification.text_content()
+                    logger.info(f"Toast notification text: '{notification_text}'")
+
+                    if notification_text:
+                        notification_lower = notification_text.lower().strip()
+
+                        # Check for success indicators (including Spanish "Éxito")
+                        if any(word in notification_lower for word in ['éxito', 'success', 'creado', 'created', 'successful', 'exitoso']):
+                            logger.info(f"✅ User {username} created successfully - confirmed by toast")
+                            success = True
+                        # Check for error indicators
+                        elif any(word in notification_lower for word in ['error', 'failed', 'existe', 'exists', 'invalid', 'inválido', 'fallo']):
                             error_message = f"User creation failed: {notification_text}"
                             logger.error(error_message)
                             success = False
-                        elif is_success:
-                            success_msg = f"User created successfully: {notification_text}"
-                            logger.info(success_msg)
-                            success = True
                         else:
-                            # Fallback: check notification text content for success/error keywords
-                            notification_lower = notification_text.lower()
-                            if any(word in notification_lower for word in ['success', 'created', 'successful', 'added']):
-                                logger.info("Toast indicates success based on text content")
-                                success = True
-                            elif any(word in notification_lower for word in ['error', 'failed', 'exists', 'invalid']):
-                                error_message = f"User creation failed: {notification_text}"
-                                logger.error(error_message)
-                                success = False
-                            else:
-                                error_message = f"Ambiguous notification: {notification_text}"
-                                logger.warning(error_message)
-                                success = False
+                            logger.warning(f"Ambiguous notification: {notification_text}")
+                            success = False
                     else:
-                        logger.warning("Toast notification found but no text content")
+                        logger.warning("Toast notification found but empty text")
                         success = False
-                        error_message = "Notification appeared but no message text found"
                 else:
                     logger.warning("No toast notification found")
                     success = False
@@ -540,14 +547,14 @@ async def assign_balance(username, amount):
             await asyncio.sleep(0.5)
             
             # Search for the user
-            search_input = await page.query_selector('input[name="search"]')
+            search_input = await page.query_selector('input[placeholder="Buscar Usuario"]')
             if not search_input:
                 error_msg = "Search input not found on balance page"
                 logger.error(error_msg)
                 return False, error_msg
-            
+
             logger.info(f"Searching for user: {username}")
-            await page.fill('input[name="search"]', username)
+            await page.fill('input[placeholder="Buscar Usuario"]', username)
             
             # Wait for search results
             await asyncio.sleep(1.0)
@@ -560,8 +567,8 @@ async def assign_balance(username, amount):
             while not user_found and search_attempts < max_search_attempts:
                 search_attempts += 1
                 logger.info(f"Search attempt {search_attempts} for user: {username}")
-                
-                user_rows = await page.query_selector_all('.table-users-desktop__item')
+
+                user_rows = await page.query_selector_all('.adm-bets-table-row-user')
                 
                 if not user_rows:
                     logger.warning(f"No users found in search results for: {username} (attempt {search_attempts})")
@@ -570,8 +577,8 @@ async def assign_balance(username, amount):
                     if search_attempts == 1:
                         logger.info("Attempting to click search button to refresh results")
                         try:
-                            # Look for the search button with the specific class structure
-                            search_button = await page.query_selector('button.button-desktop.button-desktop_color_default.button-desktop_borderRadius_10')
+                            # Look for the search button (Aplicar filtro)
+                            search_button = await page.query_selector('button[type="submit"].button.button_sizable_default.button_colors_default')
                             if search_button:
                                 logger.info("Found search button, clicking it")
                                 await search_button.click()
@@ -597,16 +604,20 @@ async def assign_balance(username, amount):
                 
                 # Check each user row for matching username
                 for user_row in user_rows:
-                    username_element = await user_row.query_selector('.table-row-users-desktop__td-user-name')
+                    username_element = await user_row.query_selector('.adm-bets-table-row-user__td-data-user span')
                     if username_element:
                         row_username = await username_element.text_content()
                         if row_username and row_username.strip() == username:
-                            topup_button = await user_row.query_selector('.table-row-users-desktop__td-operations-top-up')
-                            if topup_button:
-                                logger.info(f"Found user {username}, clicking TopUp button")
-                                await topup_button.click()
-                                user_found = True
-                                break
+                            # Find the "Depositar" button
+                            deposit_button = await user_row.query_selector('a.button.button_sizable_default.button_colors_default')
+                            if deposit_button:
+                                # Verify it's the deposit button by checking text
+                                button_text = await deposit_button.text_content()
+                                if button_text and 'Depositar' in button_text:
+                                    logger.info(f"Found user {username}, clicking Depositar button")
+                                    await deposit_button.click()
+                                    user_found = True
+                                    break
                 
                 # If user still not found after checking all rows, continue to next attempt
                 if not user_found:
@@ -616,7 +627,7 @@ async def assign_balance(username, amount):
                     if search_attempts < max_search_attempts:
                         logger.info("Trying search button click for next attempt")
                         try:
-                            search_button = await page.query_selector('button.button-desktop.button-desktop_color_default.button-desktop_borderRadius_10')
+                            search_button = await page.query_selector('button[type="submit"].button.button_sizable_default.button_colors_default')
                             if search_button:
                                 await search_button.click()
                                 await asyncio.sleep(1.0)
@@ -632,18 +643,18 @@ async def assign_balance(username, amount):
             await asyncio.sleep(1.0)
             
             # Check if deposit form loaded
-            amount_input = await page.query_selector('input[name="amount"]')
+            amount_input = await page.query_selector('input[placeholder="Monto"]')
             submit_button = await page.query_selector('button[type="submit"]')
-            
+
             if not amount_input or not submit_button:
                 error_msg = "Deposit form elements not found"
                 logger.error(error_msg)
                 return False, error_msg
-            
+
             logger.info(f"Filling amount: {amount}")
             # Fill amount field
-            await page.fill('input[name="amount"]', '')  # Clear first
-            await page.fill('input[name="amount"]', str(amount))
+            await page.fill('input[placeholder="Monto"]', '')  # Clear first
+            await page.fill('input[placeholder="Monto"]', str(amount))
             await asyncio.sleep(0.2)
             
             # Submit the deposit form
@@ -658,47 +669,37 @@ async def assign_balance(username, amount):
                 # Wait for notifications to appear
                 logger.info("Waiting for balance assignment toast notification...")
                 notification = await page.wait_for_selector(
-                    '.notification-desktop.notification-desktop_type_error, .notification-desktop.notification-desktop_type_success',
-                    timeout=10000  # Wait up to 10 seconds
+                    '.notification__text',
+                    timeout=10000,  # Wait up to 10 seconds
+                    state='visible'
                 )
                 
                 if notification:
                     logger.info("Toast notification found for balance assignment")
-                    
-                    # Check notification type
-                    is_error = await notification.evaluate('element => element.classList.contains("notification-desktop_type_error")')
-                    is_success = await notification.evaluate('element => element.classList.contains("notification-desktop_type_success")')
-                    
+
                     # Get notification text
-                    text_element = await notification.query_selector('.notification-desktop__text')
-                    if text_element:
-                        notification_text = await text_element.text_content()
-                        logger.info(f"Balance assignment toast text: {notification_text}")
-                        
-                        if is_error:
+                    notification_text = await notification.text_content()
+                    logger.info(f"Balance assignment toast text: '{notification_text}'")
+
+                    if notification_text:
+                        notification_lower = notification_text.lower().strip()
+
+                        # Check for success indicators (Spanish and English)
+                        if any(word in notification_lower for word in ['éxito', 'success', 'agregado', 'added', 'depositado', 'deposited', 'acreditado', 'credited', 'completado', 'completed', 'exitoso']):
+                            logger.info(f"✅ Balance assignment successful: {notification_text}")
+                            success = True
+                        # Check for error indicators
+                        elif any(word in notification_lower for word in ['error', 'failed', 'insuficiente', 'insufficient', 'invalid', 'inválido', 'fallo']):
                             error_message = f"Balance assignment failed: {notification_text}"
                             logger.error(error_message)
                             success = False
-                        elif is_success:
-                            logger.info(f"Balance assignment successful: {notification_text}")
-                            success = True
                         else:
-                            # Check text content for success/error keywords
-                            notification_lower = notification_text.lower()
-                            if any(word in notification_lower for word in ['success', 'added', 'deposited', 'credited', 'completed']):
-                                logger.info("Toast indicates balance assignment success")
-                                success = True
-                            elif any(word in notification_lower for word in ['error', 'failed', 'insufficient', 'invalid']):
-                                error_message = f"Balance assignment failed: {notification_text}"
-                                logger.error(error_message)
-                                success = False
-                            else:
-                                error_message = f"Ambiguous balance notification: {notification_text}"
-                                logger.warning(error_message)
-                                success = False
+                            error_message = f"Ambiguous balance notification: {notification_text}"
+                            logger.warning(error_message)
+                            success = False
                     else:
-                        logger.warning("Balance assignment toast found but no text content")
-                        error_message = "Balance notification appeared but no message text found"
+                        logger.warning("Balance assignment toast found but empty text")
+                        error_message = "Balance notification appeared but no message text"
                         success = False
                 else:
                     logger.warning("No balance assignment toast notification found")

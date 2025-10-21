@@ -38,31 +38,46 @@ def async_retry(max_retries=3, delay=1):
 async def init_sheets_client():
     """Initialize Google Sheets client with service account authentication"""
     global _gc, _spreadsheet
-    
+
     try:
         # Get environment variables
         spreadsheet_id = os.getenv("GOOGLE_SHEETS_ID")
         credentials_path = os.getenv("GOOGLE_CREDENTIALS_PATH")
-        
+        credentials_json = os.getenv("GOOGLE_CREDENTIALS_JSON")  # For Railway/cloud deployment
+
         if not spreadsheet_id:
             logger.error("GOOGLE_SHEETS_ID environment variable not set")
             return False
-        
+
+        # Try to authenticate using JSON string first (Railway/cloud)
+        if credentials_json:
+            try:
+                logger.info("Using GOOGLE_CREDENTIALS_JSON from environment variable")
+                credentials_dict = json.loads(credentials_json)
+                _gc = gspread.service_account_from_dict(credentials_dict)
+                _spreadsheet = _gc.open_by_key(spreadsheet_id)
+                logger.info("Google Sheets client initialized successfully from JSON env var")
+                return True
+            except json.JSONDecodeError as e:
+                logger.error(f"Invalid JSON in GOOGLE_CREDENTIALS_JSON: {e}")
+                return False
+
+        # Fallback to file-based authentication (local development)
         if not credentials_path:
-            logger.error("GOOGLE_CREDENTIALS_PATH environment variable not set")
+            logger.error("Neither GOOGLE_CREDENTIALS_JSON nor GOOGLE_CREDENTIALS_PATH is set")
             return False
-        
+
         if not os.path.exists(credentials_path):
             logger.error(f"Google credentials file not found: {credentials_path}")
             return False
-        
-        # Initialize Google Sheets client
+
+        logger.info(f"Using credentials file: {credentials_path}")
         _gc = gspread.service_account(filename=credentials_path)
         _spreadsheet = _gc.open_by_key(spreadsheet_id)
-        
-        logger.info("Google Sheets client initialized successfully")
+
+        logger.info("Google Sheets client initialized successfully from file")
         return True
-        
+
     except exceptions.GoogleAuthError as e:
         logger.error(f"Google authentication error: {e}")
         return False
