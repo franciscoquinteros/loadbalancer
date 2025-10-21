@@ -291,7 +291,7 @@ async def login_to_platform(page):
             await current_page.goto(ADMIN_LOGIN_URL, wait_until="domcontentloaded")
             
             # Wait a bit longer for login form to be ready
-            await asyncio.sleep(0.2)  # Ultra fast mode
+            await asyncio.sleep(0.3)  # Need time for form to be ready
             
             # Check if login form is present
             login_input_present = await current_page.query_selector('input[type="text"][placeholder="Nombre"]')
@@ -330,10 +330,12 @@ async def login_to_platform(page):
             
             # Use more reliable selector-based approach with form clearing
             try:
-                # Clear and fill login field - ultra fast
+                # Fill login field
                 await current_page.fill('input[type="text"][placeholder="Nombre"]', ADMIN_USERNAME)
-                # Clear and fill password field - ultra fast
+                await asyncio.sleep(0.1)  # Small delay for form stability
+                # Fill password field
                 await current_page.fill('input[type="password"]', ADMIN_PASSWORD)
+                await asyncio.sleep(0.2)  # Small delay before submit
 
                 # Submit the form
                 await current_page.click('button[type="button"].button.button_sizable_default.button_colors_default')
@@ -349,14 +351,14 @@ async def login_to_platform(page):
                     continue
                 return False, current_page
             
-            # Wait for login processing - ultra fast
-            await asyncio.sleep(0.3)  # Ultra fast mode
+            # Wait for login processing - need more time for server
+            await asyncio.sleep(0.8)  # Increased for login reliability
             
             # Check for login success by looking for redirect or success indicators
             try:
                 # Try navigating to create user page to test login
                 await current_page.goto(CREATE_USER_URL, wait_until="domcontentloaded")
-                await asyncio.sleep(0.2)  # Ultra fast mode
+                await asyncio.sleep(0.4)  # Wait for page to load after login
                 
                 # Check if we can see user creation form (indicates successful login)
                 username_input = await current_page.query_selector('input[type="text"][placeholder="Nombre de usuario"]')
