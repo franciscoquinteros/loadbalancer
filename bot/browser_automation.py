@@ -45,7 +45,7 @@ async def get_browser_context():
         
         # Launch browser with maximum performance optimizations
         _browser = await _playwright.chromium.launch(
-            headless=False,
+            headless=True,
             args=[
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
