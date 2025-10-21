@@ -118,7 +118,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "2. Send 'username amount' to charge balance\n"
         "   Example: `juanperez98 2000`\n\n"
         "3. Send 'username amount b<percentage>' for bonus deposits\n"
-        "   Example: `juan100 2000 b30` (2000 + 30% bonus)\n\n"
+        "   Example: `juan100 2000 b30` (deposits 2000 with 30% bonus)\n\n"
         "Use /help for more information.",
         parse_mode='Markdown'
     )
@@ -212,8 +212,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "• All new users get the password: ganamos1\n"
         "• Browser session is saved to avoid re-login\n"
         "• All usernames and amounts should be in lowercase\n"
-        "• Bonus deposits are made as two separate transactions\n"
-        "• Bonus amount is calculated using floor(base_amount * percentage/100)\n"
+        "• Bonus deposits activate the bonus switch and apply the percentage\n"
         "• Multiple requests are processed concurrently for maximum speed"
     )
 
@@ -529,77 +528,47 @@ async def charge_balance_concurrent(update: Update, context: ContextTypes.DEFAUL
             active_operations.discard(operation_id)
 
 async def charge_balance_with_bonus_concurrent(update: Update, context: ContextTypes.DEFAULT_TYPE, username: str, base_amount: int, bonus_percentage: int, operation_id: str) -> None:
-    """Handle balance charging with bonus deposit - two separate transactions."""
+    """Handle balance charging with bonus deposit - single transaction with bonus activated."""
     async with operation_lock:
         active_operations.add(operation_id)
-    
+
     try:
-        # Calculate bonus amount using floor
-        bonus_amount = math.floor(base_amount * (bonus_percentage / 100))
-        
         # Send processing message instantly
         processing_message = await update.message.reply_text(
             f"⚡ Loading {base_amount} chips + {bonus_percentage}% bonus to `{username}`...",
             parse_mode='Markdown'
         )
-        
+
         try:
-            # First transaction: Base amount
-            success1, message1 = await assign_balance(username, base_amount)
-            
-            if not success1:
-                # Delete processing message
-                await processing_message.delete()
-                await update.message.reply_text(
-                    f"❌ **Failed to load base amount**\n\n"
-                    f"**Error:** {message1}\n\n"
-                    f"Please try again later.",
-                    parse_mode='Markdown'
-                )
-                return
-            
-            # Second transaction: Bonus amount
-            success2, message2 = await assign_balance(username, bonus_amount)
-            
+            # Single transaction with bonus activated
+            success, message = await assign_balance(username, base_amount, bonus_percentage)
+
             # Delete processing message
             await processing_message.delete()
-            
-            if success2:
-                # Both transactions successful - log both to Google Sheets
+
+            if success:
+                # Transaction successful - log to Google Sheets
                 try:
                     operator = get_operator_name(update)
-                    # Log base amount
-                    await log_chip_load(username, operator, base_amount, None, "normal")
-                    # Log bonus amount
-                    await log_chip_load(username, operator, bonus_amount, bonus_percentage, "bonus")
-                    logger.info(f"Bonus deposit logged to Google Sheets: {base_amount} + {bonus_amount} bonus to {username} by {operator}")
+                    # Log deposit with bonus percentage
+                    await log_chip_load(username, operator, base_amount, bonus_percentage, "bonus")
+                    logger.info(f"Bonus deposit logged to Google Sheets: {base_amount} + {bonus_percentage}% bonus to {username} by {operator}")
                 except Exception as e:
                     logger.error(f"Failed to log bonus deposit to Google Sheets: {e}")
                     # Continue with success message even if logging fails
-                
-                # Both transactions successful
+
+                # Transaction successful
                 await update.message.reply_text(
-                    f"✅ {base_amount} chips loaded to {username}.\n"
-                    f"✅ {bonus_amount}‑chip bonus ({bonus_percentage}%) loaded.\n"
+                    f"✅ {base_amount} chips + {bonus_percentage}% bonus loaded to {username}.\n"
                     f"Good luck!",
                     parse_mode='Markdown'
                 )
             else:
-                # Base succeeded but bonus failed - log only the base amount
-                try:
-                    operator = get_operator_name(update)
-                    # Log only the successful base amount
-                    await log_chip_load(username, operator, base_amount, None, "normal")
-                    logger.info(f"Partial bonus deposit logged to Google Sheets: {base_amount} to {username} by {operator} (bonus failed)")
-                except Exception as e:
-                    logger.error(f"Failed to log partial bonus deposit to Google Sheets: {e}")
-                    # Continue with error message even if logging fails
-                
-                # Base succeeded but bonus failed
+                # Transaction failed
                 await update.message.reply_text(
-                    f"✅ {base_amount} chips loaded to {username}.\n"
-                    f"❌ **Bonus deposit failed:** {message2}\n\n"
-                    f"Base amount was loaded successfully, but bonus deposit encountered an error.",
+                    f"❌ **Failed to load balance with bonus**\n\n"
+                    f"**Error:** {message}\n\n"
+                    f"Please try again later.",
                     parse_mode='Markdown'
                 )
                 

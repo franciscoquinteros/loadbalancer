@@ -357,7 +357,7 @@ async def login_to_platform(page):
                 return False, current_page
             
             # Wait for login processing with reasonable timeout
-            await asyncio.sleep(1.5)  # +1 second (was 1.5)
+            await asyncio.sleep(1.0)  # Reduced from 1.5s for speed
             
             # Check for login success by looking for redirect or success indicators
             try:
@@ -449,10 +449,10 @@ async def create_user(username, password):
             
             # Navigate with minimal waiting
             await page.goto(CREATE_USER_URL, wait_until="domcontentloaded")
-            
+
             # Wait for page to be ready
-            await asyncio.sleep(0.5)  # +1 second (was 0.5)
-            
+            await asyncio.sleep(0.3)  # Reduced from 0.5s for speed
+
             # Take screenshot of the create user page
             try:
                 screenshot_path = "create_user_page.png"
@@ -515,7 +515,7 @@ async def create_user(username, password):
                 await asyncio.sleep(0.1)  # +1 second (was 0.1)
                 await password_input.type(password, delay=100)  # Slower typing
                 logger.info(f"Password field filled")
-                await asyncio.sleep(1.0)  # +1 second (was 1.0)
+                await asyncio.sleep(0.7)  # Reduced from 1.0s for speed
 
             confirm_password_input = await page.query_selector('input[name="confirmPassword"]')
             if confirm_password_input:
@@ -525,7 +525,7 @@ async def create_user(username, password):
                 await asyncio.sleep(0.1)  # +1 second (was 0.1)
                 await confirm_password_input.type(password, delay=100)  # Slower typing
                 logger.info(f"Confirm password field filled")
-                await asyncio.sleep(1.0)  # +1 second (was 1.0)
+                await asyncio.sleep(0.7)  # Reduced from 1.0s for speed
 
             # Remove role field from form if it exists (let backend assign it automatically)
             await page.evaluate("""
@@ -559,7 +559,7 @@ async def create_user(username, password):
             logger.info("User creation form submitted, waiting for confirmation modal...")
 
             # Wait for confirmation modal to appear and be ready
-            await asyncio.sleep(1.0)  # +1 second (was 1.0)
+            await asyncio.sleep(0.7)  # Reduced from 1.0s for speed
 
             # Click the confirmation button in the modal
             try:
@@ -576,7 +576,7 @@ async def create_user(username, password):
                     await modal_button.click()
                     logger.info("Confirmation button clicked, waiting for backend processing...")
                     # Wait for backend to process the request
-                    await asyncio.sleep(1.5)  # +1 second (was 1.5)
+                    await asyncio.sleep(1.0)  # Reduced from 1.5s for speed
                 else:
                     logger.warning("Confirmation modal button not found")
             except Exception as e:
@@ -643,7 +643,7 @@ async def create_user(username, password):
             logger.info("No definitive toast found, performing fallback checks...")
             
             # Wait a bit more for page to settle
-            await asyncio.sleep(1.0)  # +1 second (was 1.0)
+            await asyncio.sleep(0.5)  # Reduced from 1.0s for speed
             
             # Check if form was cleared (common success indicator)
             try:
@@ -670,8 +670,14 @@ async def create_user(username, password):
         logger.error(error_msg)
         return False, error_msg
 
-async def assign_balance(username, amount):
-    """Assign balance to a user on the platform"""
+async def assign_balance(username, amount, bonus_percentage=None):
+    """Assign balance to a user on the platform
+
+    Args:
+        username: The username to assign balance to
+        amount: The amount to deposit
+        bonus_percentage: Optional bonus percentage (e.g., 50 for 50% bonus)
+    """
     try:
         context = await get_browser_context()
         page = await context.new_page()
@@ -688,8 +694,8 @@ async def assign_balance(username, amount):
             await page.goto(BALANCE_URL, wait_until="domcontentloaded")
             
             # Wait for page to be ready
-            await asyncio.sleep(0.5)  # +1 second (was 0.5)
-            
+            await asyncio.sleep(0.3)  # Reduced from 0.5s for speed
+
             # Search for the user
             search_input = await page.query_selector('input[placeholder="Buscar Usuario"]')
             if not search_input:
@@ -701,7 +707,7 @@ async def assign_balance(username, amount):
             await page.fill('input[placeholder="Buscar Usuario"]', username)
             
             # Wait for search results
-            await asyncio.sleep(1.0)  # +1 second (was 1.0)
+            await asyncio.sleep(0.5)  # Reduced from 1.0s for speed
             
             # Find user row with parallel processing - try twice if user not found initially
             user_found = False
@@ -729,7 +735,7 @@ async def assign_balance(username, amount):
                                 
                                 # Wait for spinner to appear and then disappear
                                 logger.info("Waiting for spinner loader to appear and disappear")
-                                await asyncio.sleep(5.0)  # +1 second (was 5.0)
+                                await asyncio.sleep(3.0)  # Reduced from 5.0s for speed
                                 
                             else:
                                 logger.warning("Search button not found")
@@ -784,7 +790,7 @@ async def assign_balance(username, amount):
                 return False, error_msg
             
             # Wait for deposit form to load
-            await asyncio.sleep(1.0)  # +1 second (was 1.0)
+            await asyncio.sleep(0.5)  # Reduced from 1.0s for speed
             
             # Check if deposit form loaded
             amount_input = await page.query_selector('input[placeholder="Monto"]')
@@ -827,8 +833,48 @@ async def assign_balance(username, amount):
             # Fill amount field
             await page.fill('input[placeholder="Monto"]', '')  # Clear first
             await page.fill('input[placeholder="Monto"]', str(amount))
-            await asyncio.sleep(0.2)  # +1 second (was 0.2)
-            
+            await asyncio.sleep(0.1)  # Reduced from 0.2s for speed
+
+            # Handle bonus if provided
+            if bonus_percentage is not None:
+                logger.info(f"Activating bonus: {bonus_percentage}%")
+
+                # Find the bonus switcher (custom div element, not a standard checkbox)
+                bonus_switch = await page.query_selector('div.switcher')
+
+                if bonus_switch:
+                    # Check if already active by looking for 'switcher_active' class
+                    class_attr = await bonus_switch.get_attribute('class')
+                    is_active = 'switcher_active' in class_attr if class_attr else False
+
+                    if not is_active:
+                        logger.info("Bonus switch is inactive, activating it...")
+                        await bonus_switch.click()
+                        logger.info("Bonus switch activated")
+                        await asyncio.sleep(0.2)
+                    else:
+                        logger.info("Bonus switch already active")
+
+                    # Find and fill the bonus percentage field
+                    # Use specific selector to avoid confusion with the main amount field
+                    bonus_input = await page.query_selector('input[placeholder="Por ciento %"]')
+                    if not bonus_input:
+                        # Try using the bonus-specific class
+                        bonus_input = await page.query_selector('input.input_bonus')
+                    if not bonus_input:
+                        # Try combining name with class to be specific
+                        bonus_input = await page.query_selector('input[name="amount"].input_bonus')
+
+                    if bonus_input:
+                        await bonus_input.fill('')  # Clear first
+                        await bonus_input.fill(str(bonus_percentage))
+                        logger.info(f"Bonus percentage filled: {bonus_percentage}%")
+                        await asyncio.sleep(0.1)
+                    else:
+                        logger.warning("Bonus input field not found (tried placeholder 'Por ciento %' and class 'input_bonus')")
+                else:
+                    logger.warning("Bonus switch not found (looking for div.switcher)")
+
             # Submit the deposit form
             await page.click('button[type="submit"]')
             logger.info("Balance assignment form submitted, waiting for confirmation...")

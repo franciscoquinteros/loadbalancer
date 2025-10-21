@@ -197,14 +197,14 @@ async def load_balance_endpoint(request: BalanceLoadRequest):
 async def load_balance_bonus_endpoint(request: BalanceLoadBonusRequest):
     """
     Load balance to a user with bonus
-    
+
     This endpoint loads a specified base amount plus a bonus percentage
-    to a user's account. The bonus is calculated and added as a separate transaction.
+    to a user's account using the bonus feature in the deposit form.
     """
     try:
         logger.info(f"Balance load with bonus request received: conversation_id={request.conversation_id}, "
                    f"username={request.username}, amount={request.amount}, bonus={request.bonus_percentage}%")
-        
+
         # Validate bonus percentage range
         if request.bonus_percentage < 1 or request.bonus_percentage > 200:
             response = BalanceLoadResponse(
@@ -214,82 +214,45 @@ async def load_balance_bonus_endpoint(request: BalanceLoadBonusRequest):
                 error_detail="Bonus percentage must be between 1 and 200"
             )
             return response
-        
-        # Calculate bonus amount using floor (same as Telegram bot)
-        bonus_amount = math.floor(request.amount * (request.bonus_percentage / 100))
-        
-        # First transaction: Base amount
-        success1, message1 = await assign_balance(request.username, request.amount)
-        
-        if not success1:
-            response = BalanceLoadResponse(
-                status="error",
-                username=request.username,
-                response_message="Failed to load base amount",
-                error_detail=message1
-            )
-            logger.error(f"Base amount load failed: {request.username} - {message1}")
-            return response
-        
-        # Second transaction: Bonus amount
-        success2, message2 = await assign_balance(request.username, bonus_amount)
-        
-        if success2:
-            # Both transactions successful - log both to Google Sheets
+
+        # Single transaction with bonus activated
+        success, message = await assign_balance(request.username, request.amount, request.bonus_percentage)
+
+        if success:
+            # Transaction successful - log to Google Sheets
             try:
                 operator = f"api_bot_{request.conversation_id}"
-                # Log base amount
                 await log_chip_load(
                     username=request.username,
                     operator=operator,
                     amount=request.amount,
-                    bonus_percentage=None,
-                    load_type="normal"
-                )
-                # Log bonus amount
-                await log_chip_load(
-                    username=request.username,
-                    operator=operator,
-                    amount=bonus_amount,
                     bonus_percentage=request.bonus_percentage,
                     load_type="bonus"
                 )
-                logger.info(f"Bonus load logged to Google Sheets: {request.amount} + {bonus_amount} bonus to {request.username}")
+                logger.info(f"Bonus load logged to Google Sheets: {request.amount} + {request.bonus_percentage}% bonus to {request.username}")
             except Exception as e:
                 logger.error(f"Failed to log bonus load to Google Sheets: {e}")
                 # Continue with success response even if logging fails
-            
+
             response = BalanceLoadResponse(
                 status="success",
                 username=request.username,
                 amount_loaded=request.amount,
-                bonus_amount=bonus_amount,
-                response_message=f"Successfully loaded {request.amount} pesos + {bonus_amount} bonus pesos ({request.bonus_percentage}%) to {request.username}"
+                bonus_amount=request.bonus_percentage,
+                response_message=f"Successfully loaded {request.amount} pesos + {request.bonus_percentage}% bonus to {request.username}"
             )
-            logger.info(f"Bonus load successful: {request.amount} + {bonus_amount} bonus to {request.username}")
+            logger.info(f"Bonus load successful: {request.amount} + {request.bonus_percentage}% bonus to {request.username}")
             return response
-        
+
         else:
-            # Base succeeded but bonus failed - log only the base amount
-            try:
-                await log_chip_load(
-                    username=request.username,
-                    operator=f"api_bot_{request.conversation_id}",
-                    amount=request.amount,
-                    bonus_percentage=None,
-                    load_type="normal"
-                )
-            except Exception as e:
-                logger.error(f"Failed to log partial bonus load to Google Sheets: {e}")
-            
+            # Transaction failed
             response = BalanceLoadResponse(
                 status="error",
                 username=request.username,
-                amount_loaded=request.amount,
-                response_message=f"Base amount loaded but bonus failed",
-                error_detail=f"Base amount ({request.amount}) was loaded successfully, but bonus loading failed: {message2}"
+                response_message="Failed to load balance with bonus",
+                error_detail=message
             )
-            logger.warning(f"Partial bonus load: {request.username} - base succeeded, bonus failed: {message2}")
+            logger.error(f"Bonus load failed: {request.username} - {message}")
             return response
                 
     except Exception as e:
