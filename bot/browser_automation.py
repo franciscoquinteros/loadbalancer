@@ -716,15 +716,21 @@ async def assign_balance(username, amount, bonus_percentage=None):
                 logger.error(error_msg)
                 return False, error_msg
             
-            # Minimal wait for deposit form
-            await asyncio.sleep(0.1)  # Ultra fast mode
-            
-            # Check if deposit form loaded
-            amount_input = await page.query_selector('input[placeholder="Monto"]')
-            submit_button = await page.query_selector('button[type="submit"]')
+            # Wait for deposit form to load with timeout
+            try:
+                amount_input = await page.wait_for_selector(
+                    'input[placeholder="Monto"]',
+                    timeout=3000,
+                    state='visible'
+                )
+                submit_button = await page.query_selector('button[type="submit"]')
 
-            if not amount_input or not submit_button:
-                error_msg = "Deposit form elements not found"
+                if not amount_input or not submit_button:
+                    error_msg = "Deposit form elements not found"
+                    logger.error(error_msg)
+                    return False, error_msg
+            except Exception as e:
+                error_msg = f"Deposit form did not load in time: {str(e)}"
                 logger.error(error_msg)
                 return False, error_msg
 
