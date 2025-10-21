@@ -200,7 +200,7 @@ async def is_logged_in(page):
                 await asyncio.sleep(1.0)
         
         # Wait for page to fully load and stabilize
-        await asyncio.sleep(1.8)  # +1 second (was 0.8)
+        await asyncio.sleep(0.8)  # +1 second (was 0.8)
         
         # Check for login form (indicates not logged in)
         login_form = await page.query_selector('input[type="text"][placeholder="Nombre"]')
@@ -291,7 +291,7 @@ async def login_to_platform(page):
             await current_page.goto(ADMIN_LOGIN_URL, wait_until="domcontentloaded")
             
             # Wait a bit longer for login form to be ready
-            await asyncio.sleep(1.5)  # +1 second (was 0.5)
+            await asyncio.sleep(0.5)  # +1 second (was 0.5)
             
             # Check if login form is present
             login_input_present = await current_page.query_selector('input[type="text"][placeholder="Nombre"]')
@@ -332,15 +332,15 @@ async def login_to_platform(page):
             try:
                 # Clear and fill login field - this prevents issues with cached/overlapping values
                 await current_page.fill('input[type="text"][placeholder="Nombre"]', '')  # Clear first
-                await asyncio.sleep(1.1)  # +1 second (was 0.1)
+                await asyncio.sleep(0.1)  # +1 second (was 0.1)
                 await current_page.fill('input[type="text"][placeholder="Nombre"]', ADMIN_USERNAME)
-                await asyncio.sleep(1.1)  # +1 second (was 0.1)
+                await asyncio.sleep(0.1)  # +1 second (was 0.1)
 
                 # Clear and fill password field - this prevents issues with cached/overlapping values
                 await current_page.fill('input[type="password"]', '')  # Clear first
-                await asyncio.sleep(1.1)  # +1 second (was 0.1)
+                await asyncio.sleep(0.1)  # +1 second (was 0.1)
                 await current_page.fill('input[type="password"]', ADMIN_PASSWORD)
-                await asyncio.sleep(1.5)  # +1 second (was 0.5)
+                await asyncio.sleep(0.5)  # +1 second (was 0.5)
 
                 # Submit the form
                 await current_page.click('button[type="button"].button.button_sizable_default.button_colors_default')
@@ -357,13 +357,13 @@ async def login_to_platform(page):
                 return False, current_page
             
             # Wait for login processing with reasonable timeout
-            await asyncio.sleep(2.5)  # +1 second (was 1.5)
+            await asyncio.sleep(1.5)  # +1 second (was 1.5)
             
             # Check for login success by looking for redirect or success indicators
             try:
                 # Try navigating to create user page to test login
                 await current_page.goto(CREATE_USER_URL, wait_until="domcontentloaded")
-                await asyncio.sleep(1.5)  # +1 second (was 0.5)
+                await asyncio.sleep(0.5)  # +1 second (was 0.5)
                 
                 # Check if we can see user creation form (indicates successful login)
                 username_input = await current_page.query_selector('input[type="text"][placeholder="Nombre de usuario"]')
@@ -451,7 +451,7 @@ async def create_user(username, password):
             await page.goto(CREATE_USER_URL, wait_until="domcontentloaded")
             
             # Wait for page to be ready
-            await asyncio.sleep(1.5)  # +1 second (was 0.5)
+            await asyncio.sleep(0.5)  # +1 second (was 0.5)
             
             # Take screenshot of the create user page
             try:
@@ -489,43 +489,43 @@ async def create_user(username, password):
             username_input = await page.query_selector('input[type="text"][placeholder="Nombre de usuario"]')
             if username_input:
                 await username_input.click()  # Focus the input
-                await asyncio.sleep(1.3)  # +1 second (was 0.3)
+                await asyncio.sleep(0.3)  # +1 second (was 0.3)
                 await username_input.fill('')  # Clear first
-                await asyncio.sleep(1.2)  # +1 second (was 0.2)
+                await asyncio.sleep(0.2)  # +1 second (was 0.2)
                 # Type slower with random-like delay
                 await username_input.type(username, delay=100)
                 logger.info(f"Username field filled: {username}")
-                await asyncio.sleep(1.5)  # +1 second (was 0.5)
+                await asyncio.sleep(0.5)  # +1 second (was 0.5)
             else:
                 logger.error("Username input field not found")
                 return False, "Username input field not found"
             await page.fill('input[name="email"]', '')  # Email vacío
-            await asyncio.sleep(1.1)  # +1 second (was 0.1)
+            await asyncio.sleep(0.1)  # +1 second (was 0.1)
             await page.fill('input[name="name"]', '')  # Nombre vacío
-            await asyncio.sleep(1.1)  # +1 second (was 0.1)
+            await asyncio.sleep(0.1)  # +1 second (was 0.1)
             await page.fill('input[name="surname"]', '')  # Apellido vacío
-            await asyncio.sleep(1.1)  # +1 second (was 0.1)
+            await asyncio.sleep(0.1)  # +1 second (was 0.1)
 
             # Use type() for password fields to trigger proper state updates
             password_input = await page.query_selector('input[name="password"]')
             if password_input:
                 await password_input.click()
-                await asyncio.sleep(1.1)  # +1 second (was 0.1)
+                await asyncio.sleep(0.1)  # +1 second (was 0.1)
                 await password_input.fill('')
-                await asyncio.sleep(1.1)  # +1 second (was 0.1)
+                await asyncio.sleep(0.1)  # +1 second (was 0.1)
                 await password_input.type(password, delay=100)  # Slower typing
                 logger.info(f"Password field filled")
-                await asyncio.sleep(2.0)  # +1 second (was 1.0)
+                await asyncio.sleep(1.0)  # +1 second (was 1.0)
 
             confirm_password_input = await page.query_selector('input[name="confirmPassword"]')
             if confirm_password_input:
                 await confirm_password_input.click()
-                await asyncio.sleep(1.1)  # +1 second (was 0.1)
+                await asyncio.sleep(0.1)  # +1 second (was 0.1)
                 await confirm_password_input.fill('')
-                await asyncio.sleep(1.1)  # +1 second (was 0.1)
+                await asyncio.sleep(0.1)  # +1 second (was 0.1)
                 await confirm_password_input.type(password, delay=100)  # Slower typing
                 logger.info(f"Confirm password field filled")
-                await asyncio.sleep(2.0)  # +1 second (was 1.0)
+                await asyncio.sleep(1.0)  # +1 second (was 1.0)
 
             # Remove role field from form if it exists (let backend assign it automatically)
             await page.evaluate("""
@@ -537,7 +537,7 @@ async def create_user(username, password):
                     }
                 }
             """)
-            await asyncio.sleep(1.1)  # +1 second (was 0.1)
+            await asyncio.sleep(0.1)  # +1 second (was 0.1)
             
             # Debug: capture form data before submission
             form_data = await page.evaluate("""
@@ -559,7 +559,7 @@ async def create_user(username, password):
             logger.info("User creation form submitted, waiting for confirmation modal...")
 
             # Wait for confirmation modal to appear and be ready
-            await asyncio.sleep(2.0)  # +1 second (was 1.0)
+            await asyncio.sleep(1.0)  # +1 second (was 1.0)
 
             # Click the confirmation button in the modal
             try:
@@ -572,11 +572,11 @@ async def create_user(username, password):
                 if modal_button:
                     logger.info("Confirmation modal found, clicking 'Crear jugador' button...")
                     # Wait a bit to ensure modal is fully interactive
-                    await asyncio.sleep(1.3)  # +1 second (was 0.3)
+                    await asyncio.sleep(0.3)  # +1 second (was 0.3)
                     await modal_button.click()
                     logger.info("Confirmation button clicked, waiting for backend processing...")
                     # Wait for backend to process the request
-                    await asyncio.sleep(2.5)  # +1 second (was 1.5)
+                    await asyncio.sleep(1.5)  # +1 second (was 1.5)
                 else:
                     logger.warning("Confirmation modal button not found")
             except Exception as e:
@@ -643,7 +643,7 @@ async def create_user(username, password):
             logger.info("No definitive toast found, performing fallback checks...")
             
             # Wait a bit more for page to settle
-            await asyncio.sleep(2.0)  # +1 second (was 1.0)
+            await asyncio.sleep(1.0)  # +1 second (was 1.0)
             
             # Check if form was cleared (common success indicator)
             try:
@@ -688,7 +688,7 @@ async def assign_balance(username, amount):
             await page.goto(BALANCE_URL, wait_until="domcontentloaded")
             
             # Wait for page to be ready
-            await asyncio.sleep(1.5)  # +1 second (was 0.5)
+            await asyncio.sleep(0.5)  # +1 second (was 0.5)
             
             # Search for the user
             search_input = await page.query_selector('input[placeholder="Buscar Usuario"]')
@@ -701,7 +701,7 @@ async def assign_balance(username, amount):
             await page.fill('input[placeholder="Buscar Usuario"]', username)
             
             # Wait for search results
-            await asyncio.sleep(2.0)  # +1 second (was 1.0)
+            await asyncio.sleep(1.0)  # +1 second (was 1.0)
             
             # Find user row with parallel processing - try twice if user not found initially
             user_found = False
@@ -729,15 +729,15 @@ async def assign_balance(username, amount):
                                 
                                 # Wait for spinner to appear and then disappear
                                 logger.info("Waiting for spinner loader to appear and disappear")
-                                await asyncio.sleep(6.0)  # +1 second (was 5.0)
+                                await asyncio.sleep(5.0)  # +1 second (was 5.0)
                                 
                             else:
                                 logger.warning("Search button not found")
-                                await asyncio.sleep(2.0)  # +1 second (was 1.0)
+                                await asyncio.sleep(1.0)  # +1 second (was 1.0)
                                 
                         except Exception as e:
                             logger.error(f"Error clicking search button: {e}")
-                            await asyncio.sleep(2.0)  # +1 second (was 1.0)
+                            await asyncio.sleep(1.0)  # +1 second (was 1.0)
                     
                     # Continue to next attempt or exit if max attempts reached
                     if search_attempts >= max_search_attempts:
@@ -774,7 +774,7 @@ async def assign_balance(username, amount):
                             search_button = await page.query_selector('button[type="submit"].button.button_sizable_default.button_colors_default')
                             if search_button:
                                 await search_button.click()
-                                await asyncio.sleep(2.0)  # +1 second (was 1.0)
+                                await asyncio.sleep(1.0)  # +1 second (was 1.0)
                         except Exception as e:
                             logger.warning(f"Error in additional search button click: {e}")
             
@@ -784,7 +784,7 @@ async def assign_balance(username, amount):
                 return False, error_msg
             
             # Wait for deposit form to load
-            await asyncio.sleep(2.0)  # +1 second (was 1.0)
+            await asyncio.sleep(1.0)  # +1 second (was 1.0)
             
             # Check if deposit form loaded
             amount_input = await page.query_selector('input[placeholder="Monto"]')
@@ -827,7 +827,7 @@ async def assign_balance(username, amount):
             # Fill amount field
             await page.fill('input[placeholder="Monto"]', '')  # Clear first
             await page.fill('input[placeholder="Monto"]', str(amount))
-            await asyncio.sleep(1.2)  # +1 second (was 0.2)
+            await asyncio.sleep(0.2)  # +1 second (was 0.2)
             
             # Submit the deposit form
             await page.click('button[type="submit"]')
