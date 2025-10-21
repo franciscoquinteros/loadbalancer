@@ -187,7 +187,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "• Authentication is saved and persistent\n\n"
         "User Creation:\n"
         "Send any message with just a username to create a new user.\n"
-        "The bot will use the password: Roma123\n\n"
+        "The bot will use the password: ganamos1\n\n"
         "Balance Loading:\n"
         "Send a message with format: username amount\n"
         "Example: juanperez98 2000\n\n"
@@ -209,7 +209,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "• /debug - Show troubleshooting information\n"
         "• /restart - Restart the bot service\n\n"
         "Notes:\n"
-        "• All new users get the password: Roma123\n"
+        "• All new users get the password: ganamos1\n"
         "• Browser session is saved to avoid re-login\n"
         "• All usernames and amounts should be in lowercase\n"
         "• Bonus deposits are made as two separate transactions\n"
@@ -403,7 +403,7 @@ async def create_new_user_concurrent(update: Update, context: ContextTypes.DEFAU
     
     try:
         # Fixed password as per requirements
-        password = "Roma123"
+        password = "ganamos1"
         
         # Send processing message instantly
         processing_message = await update.message.reply_text(
@@ -430,11 +430,11 @@ async def create_new_user_concurrent(update: Update, context: ContextTypes.DEFAU
                 
                 # Create Spanish success message that can be copied easily
                 copyable_message = (
+                    f"Cuenta creada! 🙌\n"
                     f"🔑Usuario: {username}\n"
-                    f"🔒Contraseña: Roma123\n\n"
-                    f"❗️VA TODO EN MINÚSCULAS, INCLUYENDO LAS PRIMERAS LETRAS❗️\n\n"
-                    f"👉Enlace: {PLATFORM_URL}\n\n"
-                    f"Te dejo el CVU aqui abajo para cuando quieras cargar 👇\n\n"
+                    f"🔒Contraseña: ganamos1\n"
+                    f"Plataforma: https://ganamosnet.io\n"
+                    f"Te dejo el ALIAS aqui abajo para cuando quieras cargar\n\n"
                 )
                 
                 # Send the message in a code block to make it easily copyable
@@ -520,10 +520,9 @@ async def charge_balance_concurrent(update: Update, context: ContextTypes.DEFAUL
                 pass
                 
             await update.message.reply_text(
-                f"❌ **An error occurred while charging balance**\n\n"
-                f"**Error:** {str(e)}\n\n"
-                f"Please try again later.",
-                parse_mode='Markdown'
+                f"❌ An error occurred while charging balance\n\n"
+                f"Error: {str(e)}\n\n"
+                f"Please try again later."
             )
     finally:
         async with operation_lock:

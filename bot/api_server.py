@@ -68,7 +68,7 @@ async def create_user_endpoint(request: UserCreationRequest):
                    f"username={request.candidate_username}, attempt={request.attempt_number}")
         
         # Call the existing browser automation function
-        success, message = await create_user(request.candidate_username, "Roma123")
+        success, message = await create_user(request.candidate_username, "ganamos1")
         
         if success:
             # Log successful creation to Google Sheets
@@ -84,11 +84,11 @@ async def create_user_endpoint(request: UserCreationRequest):
             
             # Create the same copyable message format as the Telegram bot
             copyable_message = (
+                f"Cuenta creada! 🙌\n"
                 f"🔑Usuario: {request.candidate_username}\n"
-                f"🔒Contraseña: Roma123\n\n"
-                f"❗️VA TODO EN MINÚSCULAS, INCLUYENDO LAS PRIMERAS LETRAS❗️\n\n"
-                f"👉Enlace: {PLATFORM_URL}\n\n"
-                f"Te dejo el CVU aqui abajo para cuando quieras cargar 👇\n\n"
+                f"🔒Contraseña: ganamos1\n"
+                f"Plataforma: https://ganamosnet.io\n"
+                f"Te dejo el ALIAS aqui abajo para cuando quieras cargar\n\n"
             )
             
             response = UserCreationResponse(
