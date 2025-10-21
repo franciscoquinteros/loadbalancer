@@ -424,8 +424,9 @@ async def create_user(username, password):
 
             # Click the confirmation button in the modal
             try:
+                # Wait for modal to appear
                 modal_button = await page.wait_for_selector(
-                    'button[type="button"].button.button_sizable_low.button_colors_transparent',
+                    'button:has-text("Crear jugador")',
                     timeout=5000,
                     state='visible'
                 )
