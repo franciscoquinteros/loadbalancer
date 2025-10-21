@@ -13,8 +13,8 @@ import subprocess
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler, CallbackQueryHandler
-from browser_automation import create_user, assign_balance, cleanup_browser
-from sheets_logger import log_user_creation, log_chip_load, test_sheets_connection, get_operator_name
+from .browser_automation import create_user, assign_balance, cleanup_browser
+from .sheets_logger import log_user_creation, log_chip_load, test_sheets_connection, get_operator_name
 from pathlib import Path
 
 # Load environment variables

@@ -10,9 +10,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-from api_models import UserCreationRequest, UserCreationResponse, HealthResponse, BalanceLoadRequest, BalanceLoadBonusRequest, BalanceLoadResponse
-from browser_automation import create_user, assign_balance
-from sheets_logger import log_user_creation, log_chip_load
+from .api_models import UserCreationRequest, UserCreationResponse, HealthResponse, BalanceLoadRequest, BalanceLoadBonusRequest, BalanceLoadResponse
+from .browser_automation import create_user, assign_balance
+from .sheets_logger import log_user_creation, log_chip_load
 
 # Load environment variables
 load_dotenv()
