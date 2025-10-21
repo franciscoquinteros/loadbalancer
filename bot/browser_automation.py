@@ -410,6 +410,12 @@ async def create_user(username, password):
             # Fill form fields
             await page.fill('input[type="text"][placeholder="Nombre de usuario"]', username)
             await asyncio.sleep(0.1)
+            await page.fill('input[name="email"]', '')  # Email vacío
+            await asyncio.sleep(0.1)
+            await page.fill('input[name="name"]', '')  # Nombre vacío
+            await asyncio.sleep(0.1)
+            await page.fill('input[name="surname"]', '')  # Apellido vacío
+            await asyncio.sleep(0.1)
             await page.fill('input[name="password"]', password)
             await asyncio.sleep(0.1)
             await page.fill('input[name="confirmPassword"]', password)
