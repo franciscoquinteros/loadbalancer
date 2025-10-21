@@ -422,21 +422,47 @@ async def create_user(username, password):
             await page.route('**/*', log_request)
 
             # Fill form fields
-            await page.fill('input[type="text"][placeholder="Nombre de usuario"]', username)
-            await asyncio.sleep(0.1)
+            # Use type() instead of fill() to trigger React/Vue state updates
+            username_input = await page.query_selector('input[name="username"]')
+            if username_input:
+                await username_input.click()  # Focus the input
+                await asyncio.sleep(0.1)
+                await username_input.fill('')  # Clear first
+                await asyncio.sleep(0.1)
+                await username_input.type(username, delay=50)  # Type with delay to trigger events
+                await asyncio.sleep(0.2)
+            else:
+                logger.error("Username input field not found")
+                return False, "Username input field not found"
             await page.fill('input[name="email"]', '')  # Email vacío
             await asyncio.sleep(0.1)
             await page.fill('input[name="name"]', '')  # Nombre vacío
             await asyncio.sleep(0.1)
             await page.fill('input[name="surname"]', '')  # Apellido vacío
             await asyncio.sleep(0.1)
-            await page.fill('input[name="password"]', password)
-            await asyncio.sleep(0.1)
-            await page.fill('input[name="confirmPassword"]', password)
-            await asyncio.sleep(0.1)
+
+            # Use type() for password fields to trigger proper state updates
+            password_input = await page.query_selector('input[name="password"]')
+            if password_input:
+                await password_input.click()
+                await asyncio.sleep(0.1)
+                await password_input.fill('')
+                await asyncio.sleep(0.1)
+                await password_input.type(password, delay=50)
+                await asyncio.sleep(0.2)
+
+            confirm_password_input = await page.query_selector('input[name="confirmPassword"]')
+            if confirm_password_input:
+                await confirm_password_input.click()
+                await asyncio.sleep(0.1)
+                await confirm_password_input.fill('')
+                await asyncio.sleep(0.1)
+                await confirm_password_input.type(password, delay=50)
+                await asyncio.sleep(0.2)
 
             # Inject role field via JavaScript (required by backend, not in HTML form)
-            logger.info("Injecting role field with value 0")
+            # Try role 6 instead of 0 (matching logged-in user's role)
+            logger.info("Injecting role field with value 6")
             await page.evaluate("""
                 const form = document.querySelector('form');
                 if (form) {
