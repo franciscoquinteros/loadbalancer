@@ -290,8 +290,8 @@ async def login_to_platform(page):
                 await current_page.fill('input[type="password"]', ADMIN_PASSWORD)
                 await asyncio.sleep(0.5)  # Wait for button to enable
 
-                # Submit the form - wait for button to be enabled
-                await current_page.click('button:has-text("Acceder"):not([disabled])')
+                # Submit the form
+                await current_page.click('button[type="button"].button.button_sizable_default.button_colors_default')
                 logger.info("Login form submitted")
                 
             except Exception as e:
