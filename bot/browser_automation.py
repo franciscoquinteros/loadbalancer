@@ -200,7 +200,7 @@ async def is_logged_in(page):
                 await asyncio.sleep(1.0)
         
         # Wait for page to fully load and stabilize
-        await asyncio.sleep(0.8)  # +1 second (was 0.8)
+        await asyncio.sleep(0.3)  # Ultra fast mode
         
         # Check for login form (indicates not logged in)
         login_form = await page.query_selector('input[type="text"][placeholder="Nombre"]')
@@ -291,7 +291,7 @@ async def login_to_platform(page):
             await current_page.goto(ADMIN_LOGIN_URL, wait_until="domcontentloaded")
             
             # Wait a bit longer for login form to be ready
-            await asyncio.sleep(0.5)  # +1 second (was 0.5)
+            await asyncio.sleep(0.2)  # Ultra fast mode
             
             # Check if login form is present
             login_input_present = await current_page.query_selector('input[type="text"][placeholder="Nombre"]')
@@ -330,17 +330,10 @@ async def login_to_platform(page):
             
             # Use more reliable selector-based approach with form clearing
             try:
-                # Clear and fill login field - this prevents issues with cached/overlapping values
-                await current_page.fill('input[type="text"][placeholder="Nombre"]', '')  # Clear first
-                await asyncio.sleep(0.1)  # +1 second (was 0.1)
+                # Clear and fill login field - ultra fast
                 await current_page.fill('input[type="text"][placeholder="Nombre"]', ADMIN_USERNAME)
-                await asyncio.sleep(0.1)  # +1 second (was 0.1)
-
-                # Clear and fill password field - this prevents issues with cached/overlapping values
-                await current_page.fill('input[type="password"]', '')  # Clear first
-                await asyncio.sleep(0.1)  # +1 second (was 0.1)
+                # Clear and fill password field - ultra fast
                 await current_page.fill('input[type="password"]', ADMIN_PASSWORD)
-                await asyncio.sleep(0.5)  # +1 second (was 0.5)
 
                 # Submit the form
                 await current_page.click('button[type="button"].button.button_sizable_default.button_colors_default')
@@ -356,14 +349,14 @@ async def login_to_platform(page):
                     continue
                 return False, current_page
             
-            # Wait for login processing with reasonable timeout
-            await asyncio.sleep(0.6)  # Reduced from 1.0s for speed
+            # Wait for login processing - ultra fast
+            await asyncio.sleep(0.3)  # Ultra fast mode
             
             # Check for login success by looking for redirect or success indicators
             try:
                 # Try navigating to create user page to test login
                 await current_page.goto(CREATE_USER_URL, wait_until="domcontentloaded")
-                await asyncio.sleep(0.5)  # +1 second (was 0.5)
+                await asyncio.sleep(0.2)  # Ultra fast mode
                 
                 # Check if we can see user creation form (indicates successful login)
                 username_input = await current_page.query_selector('input[type="text"][placeholder="Nombre de usuario"]')
@@ -443,10 +436,7 @@ async def create_user(username, password):
             # Navigate with minimal waiting
             await page.goto(CREATE_USER_URL, wait_until="domcontentloaded")
 
-            # Wait for page to be ready
-            await asyncio.sleep(0.2)  # Reduced from 0.3s for speed
-
-            # Check if form elements are present
+            # Check if form elements are present (no wait needed)
             username_input = await page.query_selector('input[type="text"][placeholder="Nombre de usuario"]')
             password_input = await page.query_selector('input[name="password"]')
             password2_input = await page.query_selector('input[name="confirmPassword"]')
@@ -501,25 +491,20 @@ async def create_user(username, password):
             await page.click('button[type="submit"]')
             logger.info("User creation form submitted, waiting for confirmation modal...")
 
-            # Wait for confirmation modal to appear and be ready
-            await asyncio.sleep(0.2)  # Reduced for speed
-
-            # Click the confirmation button in the modal
+            # Click the confirmation button in the modal - ultra fast
             try:
-                # Wait for modal to appear
+                # Wait for modal to appear with reduced timeout
                 modal_button = await page.wait_for_selector(
                     'button:has-text("Crear jugador")',
-                    timeout=6000,  # +1 second (was 5000)
+                    timeout=3000,  # Reduced timeout for speed
                     state='visible'
                 )
                 if modal_button:
                     logger.info("Confirmation modal found, clicking 'Crear jugador' button...")
-                    # Wait a bit to ensure modal is fully interactive
-                    await asyncio.sleep(0.1)  # Reduced for speed
                     await modal_button.click()
                     logger.info("Confirmation button clicked, waiting for backend processing...")
-                    # Wait for backend to process the request
-                    await asyncio.sleep(0.4)  # Reduced for speed
+                    # Minimal wait for backend - ultra fast
+                    await asyncio.sleep(0.15)  # Ultra fast mode
                 else:
                     logger.warning("Confirmation modal button not found")
             except Exception as e:
@@ -535,7 +520,7 @@ async def create_user(username, password):
                 logger.info("Waiting for toast notification...")
                 notification = await page.wait_for_selector(
                     '.notification__text',
-                    timeout=10000,  # Wait up to 10 seconds for notification
+                    timeout=5000,  # Reduced timeout for speed
                     state='visible'
                 )
                 
@@ -585,8 +570,8 @@ async def create_user(username, password):
             # Fallback check: if no toast found, check form state and page behavior
             logger.info("No definitive toast found, performing fallback checks...")
             
-            # Wait a bit more for page to settle
-            await asyncio.sleep(0.2)  # Reduced for speed
+            # Minimal wait for page to settle
+            await asyncio.sleep(0.1)  # Ultra fast mode
             
             # Check if form was cleared (common success indicator)
             try:
@@ -636,10 +621,7 @@ async def assign_balance(username, amount, bonus_percentage=None):
             # Navigate with minimal waiting
             await page.goto(BALANCE_URL, wait_until="domcontentloaded")
             
-            # Wait for page to be ready
-            await asyncio.sleep(0.2)  # Reduced from 0.3s for speed
-
-            # Search for the user
+            # Search for the user immediately
             search_input = await page.query_selector('input[placeholder="Buscar Usuario"]')
             if not search_input:
                 error_msg = "Search input not found on balance page"
@@ -649,8 +631,8 @@ async def assign_balance(username, amount, bonus_percentage=None):
             logger.info(f"Searching for user: {username}")
             await page.fill('input[placeholder="Buscar Usuario"]', username)
             
-            # Wait for search results
-            await asyncio.sleep(0.3)  # Reduced from 0.5s for speed
+            # Minimal wait for search results
+            await asyncio.sleep(0.15)  # Ultra fast mode
             
             # Find user row with parallel processing - try twice if user not found initially
             user_found = False
@@ -676,17 +658,17 @@ async def assign_balance(username, amount, bonus_percentage=None):
                                 logger.info("Found search button, clicking it")
                                 await search_button.click()
                                 
-                                # Wait for spinner to appear and then disappear
+                                # Wait for spinner - ultra fast
                                 logger.info("Waiting for spinner loader to appear and disappear")
-                                await asyncio.sleep(1.5)  # Reduced from 3.0s for speed
+                                await asyncio.sleep(0.8)  # Ultra fast mode
                                 
                             else:
                                 logger.warning("Search button not found")
-                                await asyncio.sleep(1.0)  # +1 second (was 1.0)
+                                await asyncio.sleep(0.3)  # Ultra fast mode
                                 
                         except Exception as e:
                             logger.error(f"Error clicking search button: {e}")
-                            await asyncio.sleep(1.0)  # +1 second (was 1.0)
+                            await asyncio.sleep(0.3)  # Ultra fast mode
                     
                     # Continue to next attempt or exit if max attempts reached
                     if search_attempts >= max_search_attempts:
@@ -723,7 +705,7 @@ async def assign_balance(username, amount, bonus_percentage=None):
                             search_button = await page.query_selector('button[type="submit"].button.button_sizable_default.button_colors_default')
                             if search_button:
                                 await search_button.click()
-                                await asyncio.sleep(1.0)  # +1 second (was 1.0)
+                                await asyncio.sleep(0.3)  # Ultra fast mode
                         except Exception as e:
                             logger.warning(f"Error in additional search button click: {e}")
             
@@ -732,8 +714,8 @@ async def assign_balance(username, amount, bonus_percentage=None):
                 logger.error(error_msg)
                 return False, error_msg
             
-            # Wait for deposit form to load
-            await asyncio.sleep(0.3)  # Reduced from 0.5s for speed
+            # Minimal wait for deposit form
+            await asyncio.sleep(0.1)  # Ultra fast mode
             
             # Check if deposit form loaded
             amount_input = await page.query_selector('input[placeholder="Monto"]')
@@ -745,38 +727,12 @@ async def assign_balance(username, amount, bonus_percentage=None):
                 return False, error_msg
 
             logger.info(f"Filling amount: {amount}")
-            
-            # Enable request/response interception for balance API
-            async def log_balance_request_response(route, request):
-                response = await route.fetch()
-                
-                # Log balance API request/response
-                if '/api/' in request.url and request.method == 'POST':
-                    logger.info(f"Balance POST Request URL: {request.url}")
-                    logger.info(f"Balance POST Request Headers: {request.headers}")
-                    try:
-                        post_data = request.post_data
-                        logger.info(f"Balance POST Request Payload: {post_data}")
-                    except:
-                        logger.warning("Could not capture balance POST data")
-                    
-                    # Log response details
-                    logger.info(f"Balance Response Status: {response.status}")
-                    logger.info(f"Balance Response Headers: {response.headers}")
-                    try:
-                        response_body = await response.text()
-                        logger.info(f"Balance Response Body: {response_body}")
-                    except Exception as e:
-                        logger.warning(f"Could not capture balance response body: {e}")
-                
-                await route.fulfill(response=response)
 
-            await page.route('**/*', log_balance_request_response)
-            
-            # Fill amount field
-            await page.fill('input[placeholder="Monto"]', '')  # Clear first
+            # Request interception disabled for maximum speed
+            # It adds 500-1000ms latency
+
+            # Fill amount field - ultra fast
             await page.fill('input[placeholder="Monto"]', str(amount))
-            await asyncio.sleep(0.05)  # Reduced from 0.1s for speed
 
             # Handle bonus if provided
             if bonus_percentage is not None:
@@ -794,7 +750,6 @@ async def assign_balance(username, amount, bonus_percentage=None):
                         logger.info("Bonus switch is inactive, activating it...")
                         await bonus_switch.click()
                         logger.info("Bonus switch activated")
-                        await asyncio.sleep(0.1)
                     else:
                         logger.info("Bonus switch already active")
 
@@ -809,10 +764,8 @@ async def assign_balance(username, amount, bonus_percentage=None):
                         bonus_input = await page.query_selector('input[name="amount"].input_bonus')
 
                     if bonus_input:
-                        await bonus_input.fill('')  # Clear first
                         await bonus_input.fill(str(bonus_percentage))
                         logger.info(f"Bonus percentage filled: {bonus_percentage}%")
-                        await asyncio.sleep(0.05)
                     else:
                         logger.warning("Bonus input field not found (tried placeholder 'Por ciento %' and class 'input_bonus')")
                 else:
@@ -831,7 +784,7 @@ async def assign_balance(username, amount, bonus_percentage=None):
                 logger.info("Waiting for balance assignment toast notification...")
                 notification = await page.wait_for_selector(
                     '.notification__text',
-                    timeout=10000,  # Wait up to 10 seconds
+                    timeout=5000,  # Reduced timeout for speed
                     state='visible'
                 )
                 
