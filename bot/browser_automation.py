@@ -462,48 +462,29 @@ async def create_user(username, password):
             # NOTE: No request interception - let browser handle everything naturally
             # Request interception triggers ServicePipe anti-bot detection
 
-            # Fill form fields with human-like delays (+1 second to each delay)
-            # Use type() instead of fill() to trigger React/Vue state updates
+            # Fill form fields quickly with fill() instead of type()
             username_input = await page.query_selector('input[type="text"][placeholder="Nombre de usuario"]')
             if username_input:
-                await username_input.click()  # Focus the input
-                await asyncio.sleep(0.15)  # Reduced for speed
-                await username_input.fill('')  # Clear first
-                await asyncio.sleep(0.1)  # Reduced for speed
-                # Type faster
-                await username_input.type(username, delay=50)
+                await username_input.fill(username)
                 logger.info(f"Username field filled: {username}")
-                await asyncio.sleep(0.3)  # Reduced for speed
             else:
                 logger.error("Username input field not found")
                 return False, "Username input field not found"
-            await page.fill('input[name="email"]', '')  # Email vacío
-            await asyncio.sleep(0.05)  # Reduced for speed
-            await page.fill('input[name="name"]', '')  # Nombre vacío
-            await asyncio.sleep(0.05)  # Reduced for speed
-            await page.fill('input[name="surname"]', '')  # Apellido vacío
-            await asyncio.sleep(0.05)  # Reduced for speed
 
-            # Use type() for password fields to trigger proper state updates
+            await page.fill('input[name="email"]', '')  # Email vacío
+            await page.fill('input[name="name"]', '')  # Nombre vacío
+            await page.fill('input[name="surname"]', '')  # Apellido vacío
+
+            # Fill password fields directly
             password_input = await page.query_selector('input[name="password"]')
             if password_input:
-                await password_input.click()
-                await asyncio.sleep(0.05)  # Reduced for speed
-                await password_input.fill('')
-                await asyncio.sleep(0.05)  # Reduced for speed
-                await password_input.type(password, delay=50)  # Faster typing
+                await password_input.fill(password)
                 logger.info(f"Password field filled")
-                await asyncio.sleep(0.4)  # Reduced from 0.7s for speed
 
             confirm_password_input = await page.query_selector('input[name="confirmPassword"]')
             if confirm_password_input:
-                await confirm_password_input.click()
-                await asyncio.sleep(0.05)  # Reduced for speed
-                await confirm_password_input.fill('')
-                await asyncio.sleep(0.05)  # Reduced for speed
-                await confirm_password_input.type(password, delay=50)  # Faster typing
+                await confirm_password_input.fill(password)
                 logger.info(f"Confirm password field filled")
-                await asyncio.sleep(0.4)  # Reduced from 0.7s for speed
 
             # Remove role field from form if it exists (let backend assign it automatically)
             await page.evaluate("""
@@ -515,29 +496,13 @@ async def create_user(username, password):
                     }
                 }
             """)
-            await asyncio.sleep(0.05)  # Reduced for speed
-            
-            # Debug: capture form data before submission
-            form_data = await page.evaluate("""
-                () => {
-                    const form = document.querySelector('form');
-                    if (!form) return null;
-                    const formData = new FormData(form);
-                    const data = {};
-                    for (let [key, value] of formData.entries()) {
-                        data[key] = value;
-                    }
-                    return data;
-                }
-            """)
-            logger.info(f"Form data before submission: {form_data}")
 
             # Submit the form
             await page.click('button[type="submit"]')
             logger.info("User creation form submitted, waiting for confirmation modal...")
 
             # Wait for confirmation modal to appear and be ready
-            await asyncio.sleep(0.4)  # Reduced from 0.7s for speed
+            await asyncio.sleep(0.2)  # Reduced for speed
 
             # Click the confirmation button in the modal
             try:
@@ -550,11 +515,11 @@ async def create_user(username, password):
                 if modal_button:
                     logger.info("Confirmation modal found, clicking 'Crear jugador' button...")
                     # Wait a bit to ensure modal is fully interactive
-                    await asyncio.sleep(0.2)  # Reduced for speed
+                    await asyncio.sleep(0.1)  # Reduced for speed
                     await modal_button.click()
                     logger.info("Confirmation button clicked, waiting for backend processing...")
                     # Wait for backend to process the request
-                    await asyncio.sleep(0.6)  # Reduced from 1.0s for speed
+                    await asyncio.sleep(0.4)  # Reduced for speed
                 else:
                     logger.warning("Confirmation modal button not found")
             except Exception as e:
@@ -621,11 +586,11 @@ async def create_user(username, password):
             logger.info("No definitive toast found, performing fallback checks...")
             
             # Wait a bit more for page to settle
-            await asyncio.sleep(0.3)  # Reduced from 0.5s for speed
+            await asyncio.sleep(0.2)  # Reduced for speed
             
             # Check if form was cleared (common success indicator)
             try:
-                username_value = await page.get_attribute('input[name="username"]', 'value')
+                username_value = await page.get_attribute('input[type="text"][placeholder="Nombre de usuario"]', 'value')
                 if not username_value or username_value.strip() == "":
                     logger.info("Form cleared - likely successful user creation")
                     return True, "User created successfully (form cleared)"
