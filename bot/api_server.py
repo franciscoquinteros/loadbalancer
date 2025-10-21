@@ -84,10 +84,10 @@ async def create_user_endpoint(request: UserCreationRequest):
             
             # Create the same copyable message format as the Telegram bot
             copyable_message = (
-                f"Cuenta creada! 🙌\n"
+                f"Cuenta creada! 🙌\n\n"
                 f"🔑Usuario: {request.candidate_username}\n"
-                f"🔒Contraseña: ganamos1\n"
-                f"Plataforma: https://ganamosnet.io\n"
+                f"🔒Contraseña: ganamos1\n\n"
+                f"Plataforma: https://ganamosnet.io\n\n"
                 f"Te dejo el ALIAS aqui abajo para cuando quieras cargar\n\n"
             )
             

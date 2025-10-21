@@ -429,10 +429,10 @@ async def create_new_user_concurrent(update: Update, context: ContextTypes.DEFAU
                 
                 # Create Spanish success message that can be copied easily
                 copyable_message = (
-                    f"Cuenta creada! 🙌\n"
+                    f"Cuenta creada! 🙌\n\n"
                     f"🔑Usuario: {username}\n"
-                    f"🔒Contraseña: ganamos1\n"
-                    f"Plataforma: https://ganamosnet.io\n"
+                    f"🔒Contraseña: ganamos1\n\n"
+                    f"Plataforma: https://ganamosnet.io\n\n"
                     f"Te dejo el ALIAS aqui abajo para cuando quieras cargar\n\n"
                 )
                 
