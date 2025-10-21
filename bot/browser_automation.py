@@ -419,8 +419,8 @@ async def create_user(username, password):
             await page.click('button[type="submit"]')
             logger.info("User creation form submitted, waiting for confirmation modal...")
 
-            # Wait for confirmation modal to appear
-            await asyncio.sleep(0.5)
+            # Wait for confirmation modal to appear and be ready
+            await asyncio.sleep(1.0)
 
             # Click the confirmation button in the modal
             try:
@@ -431,8 +431,12 @@ async def create_user(username, password):
                 )
                 if modal_button:
                     logger.info("Confirmation modal found, clicking 'Crear jugador' button...")
+                    # Wait a bit to ensure modal is fully interactive
+                    await asyncio.sleep(0.3)
                     await modal_button.click()
-                    logger.info("Confirmation button clicked, waiting for result...")
+                    logger.info("Confirmation button clicked, waiting for backend processing...")
+                    # Wait for backend to process the request
+                    await asyncio.sleep(1.5)
                 else:
                     logger.warning("Confirmation modal button not found")
             except Exception as e:
