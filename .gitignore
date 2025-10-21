@@ -71,3 +71,8 @@ $RECYCLE.BIN/
 *.local
 user_contexts.json
 user_contexts.json
+
+# Google Cloud credentials
+*.json
+!package.json
+!package-lock.json
