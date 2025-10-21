@@ -45,7 +45,7 @@ async def get_browser_context():
         
         # Launch browser with maximum performance optimizations
         _browser = await _playwright.chromium.launch(
-            headless=True,
+            headless=False,
             args=[
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
@@ -325,6 +325,13 @@ async def login_to_platform(page):
                     login_form = await current_page.query_selector('input[type="text"][placeholder="Nombre"]')
                     if login_form:
                         logger.error(f"Login failed - still on login page (attempt {attempt + 1})")
+                        # Take screenshot for debugging
+                        try:
+                            screenshot_path = f"login_error_attempt_{attempt + 1}.png"
+                            await current_page.screenshot(path=screenshot_path, full_page=True)
+                            logger.error(f"Screenshot saved to {screenshot_path}")
+                        except Exception as ss_error:
+                            logger.error(f"Failed to take screenshot: {ss_error}")
                         # Try to get error message if available
                         try:
                             error_element = await current_page.query_selector('.error, .alert, .notification-desktop_type_error')
@@ -394,6 +401,14 @@ async def create_user(username, password):
             # Wait for page to be ready
             await asyncio.sleep(0.5)
             
+            # Take screenshot of the create user page
+            try:
+                screenshot_path = "create_user_page.png"
+                await page.screenshot(path=screenshot_path, full_page=True)
+                logger.info(f"Screenshot of create user page saved to {screenshot_path}")
+            except Exception as ss_error:
+                logger.error(f"Failed to take screenshot: {ss_error}")
+            
             # Check if form elements are present
             username_input = await page.query_selector('input[type="text"][placeholder="Nombre de usuario"]')
             password_input = await page.query_selector('input[name="password"]')
@@ -403,6 +418,13 @@ async def create_user(username, password):
             if not username_input or not password_input or not password2_input or not submit_button:
                 error_msg = "User creation form elements not found on page"
                 logger.error(error_msg)
+                # Take screenshot on error
+                try:
+                    screenshot_path = "create_user_error.png"
+                    await page.screenshot(path=screenshot_path, full_page=True)
+                    logger.error(f"Error screenshot saved to {screenshot_path}")
+                except Exception:
+                    pass
                 return False, error_msg
 
             logger.info(f"Creating user {username} with form submission")
@@ -423,14 +445,15 @@ async def create_user(username, password):
 
             # Fill form fields
             # Use type() instead of fill() to trigger React/Vue state updates
-            username_input = await page.query_selector('input[name="username"]')
+            username_input = await page.query_selector('input[type="text"][placeholder="Nombre de usuario"]')
             if username_input:
                 await username_input.click()  # Focus the input
                 await asyncio.sleep(0.1)
                 await username_input.fill('')  # Clear first
                 await asyncio.sleep(0.1)
                 await username_input.type(username, delay=50)  # Type with delay to trigger events
-                await asyncio.sleep(0.2)
+                logger.info(f"Username field filled: {username}")
+                await asyncio.sleep(1.0)  # Wait 1 second after filling username
             else:
                 logger.error("Username input field not found")
                 return False, "Username input field not found"
@@ -449,7 +472,8 @@ async def create_user(username, password):
                 await password_input.fill('')
                 await asyncio.sleep(0.1)
                 await password_input.type(password, delay=50)
-                await asyncio.sleep(0.2)
+                logger.info(f"Password field filled")
+                await asyncio.sleep(1.0)  # Wait 1 second after filling password
 
             confirm_password_input = await page.query_selector('input[name="confirmPassword"]')
             if confirm_password_input:
@@ -458,7 +482,8 @@ async def create_user(username, password):
                 await confirm_password_input.fill('')
                 await asyncio.sleep(0.1)
                 await confirm_password_input.type(password, delay=50)
-                await asyncio.sleep(0.2)
+                logger.info(f"Confirm password field filled")
+                await asyncio.sleep(1.0)  # Wait 1 second after filling confirm password
 
             # Inject role field via JavaScript (required by backend, not in HTML form)
             # Try role 6 instead of 0 (matching logged-in user's role)
