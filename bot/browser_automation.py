@@ -407,6 +407,20 @@ async def create_user(username, password):
 
             logger.info(f"Creating user {username} with form submission")
 
+            # Enable request interception to debug payload
+            async def log_request(route, request):
+                if '/api/agent_admin/user/' in request.url and request.method == 'POST':
+                    logger.info(f"POST Request URL: {request.url}")
+                    logger.info(f"POST Request Headers: {request.headers}")
+                    try:
+                        post_data = request.post_data
+                        logger.info(f"POST Request Payload: {post_data}")
+                    except:
+                        logger.warning("Could not capture POST data")
+                await route.continue_()
+
+            await page.route('**/*', log_request)
+
             # Fill form fields
             await page.fill('input[type="text"][placeholder="Nombre de usuario"]', username)
             await asyncio.sleep(0.1)
@@ -421,15 +435,39 @@ async def create_user(username, password):
             await page.fill('input[name="confirmPassword"]', password)
             await asyncio.sleep(0.1)
 
-            # Set role field to 0 (required by backend)
-            try:
-                await page.fill('input[name="role"]', '0')
-            except:
-                try:
-                    await page.select_option('select[name="role"]', '0')
-                except:
-                    logger.warning("Could not set role field - might cause creation failure")
+            # Inject role field via JavaScript (required by backend, not in HTML form)
+            logger.info("Injecting role field with value 0")
+            await page.evaluate("""
+                const form = document.querySelector('form');
+                if (form) {
+                    let roleInput = form.querySelector('input[name="role"]');
+                    if (!roleInput) {
+                        roleInput = document.createElement('input');
+                        roleInput.type = 'hidden';
+                        roleInput.name = 'role';
+                        roleInput.value = '0';
+                        form.appendChild(roleInput);
+                    } else {
+                        roleInput.value = '0';
+                    }
+                }
+            """)
             await asyncio.sleep(0.1)
+
+            # Debug: capture form data before submission
+            form_data = await page.evaluate("""
+                () => {
+                    const form = document.querySelector('form');
+                    if (!form) return null;
+                    const formData = new FormData(form);
+                    const data = {};
+                    for (let [key, value] of formData.entries()) {
+                        data[key] = value;
+                    }
+                    return data;
+                }
+            """)
+            logger.info(f"Form data before submission: {form_data}")
 
             # Submit the form
             await page.click('button[type="submit"]')
