@@ -113,9 +113,8 @@ async def log_user_creation(username: str, operator: str):
             sheet1 = spreadsheet.add_worksheet(title="New Users", rows="1000", cols="10")
             # Add headers
             await asyncio.get_event_loop().run_in_executor(
-                None, 
-                sheet1.append_row, 
-                ["Timestamp", "Username", "Operator"]
+                None,
+                lambda: sheet1.append_row(["Timestamp", "Username", "Operator"], table_range='A1')
             )
         
         # Prepare data
@@ -124,9 +123,8 @@ async def log_user_creation(username: str, operator: str):
         
         # Append row (run in executor to avoid blocking)
         await asyncio.get_event_loop().run_in_executor(
-            None, 
-            sheet1.append_row, 
-            row_data
+            None,
+            lambda: sheet1.append_row(row_data, table_range='A1')
         )
         
         logger.info(f"Logged user creation: {username} by {operator}")
@@ -153,9 +151,8 @@ async def log_chip_load(username: str, operator: str, amount: int, bonus_percent
             sheet2 = spreadsheet.add_worksheet(title="Chip Loads", rows="1000", cols="10")
             # Add headers
             await asyncio.get_event_loop().run_in_executor(
-                None, 
-                sheet2.append_row, 
-                ["Timestamp", "Username", "Operator", "Amount", "Bonus %", "Type"]
+                None,
+                lambda: sheet2.append_row(["Timestamp", "Username", "Operator", "Amount", "Bonus %", "Type"], table_range='A1')
             )
         
         # Prepare data
@@ -165,9 +162,8 @@ async def log_chip_load(username: str, operator: str, amount: int, bonus_percent
         
         # Append row (run in executor to avoid blocking)
         await asyncio.get_event_loop().run_in_executor(
-            None, 
-            sheet2.append_row, 
-            row_data
+            None,
+            lambda: sheet2.append_row(row_data, table_range='A1')
         )
         
         logger.info(f"Logged chip load: {amount} chips to {username} by {operator} (type: {load_type})")
