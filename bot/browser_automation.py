@@ -420,7 +420,17 @@ async def create_user(username, password):
             await asyncio.sleep(0.1)
             await page.fill('input[name="confirmPassword"]', password)
             await asyncio.sleep(0.1)
-            
+
+            # Set role field to 0 (required by backend)
+            try:
+                await page.fill('input[name="role"]', '0')
+            except:
+                try:
+                    await page.select_option('select[name="role"]', '0')
+                except:
+                    logger.warning("Could not set role field - might cause creation failure")
+            await asyncio.sleep(0.1)
+
             # Submit the form
             await page.click('button[type="submit"]')
             logger.info("User creation form submitted, waiting for confirmation modal...")
