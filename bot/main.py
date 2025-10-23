@@ -33,6 +33,9 @@ AWAITING_USERNAME, AWAITING_BALANCE, AWAITING_PASSWORD = range(3)
 # File to store user contexts
 CONTEXT_FILE = 'user_contexts.json'
 
+# File to store restart notification info
+RESTART_FILE = 'restart_info.json'
+
 # Concurrent operation tracking
 active_operations = set()
 operation_lock = asyncio.Lock()
@@ -685,11 +688,11 @@ async def test_sheets_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def restart_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Restart the bot by restarting the systemd service."""
     user_id = update.effective_user.id
-    
+
     if not is_user_authenticated(user_id):
         await request_authentication(update)
         return
-    
+
     try:
         # Send confirmation message first
         await update.message.reply_text(
@@ -697,9 +700,16 @@ async def restart_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             "The bot will restart in a few seconds. Please wait.",
             parse_mode='Markdown'
         )
-        
+
         logger.info(f"Bot restart requested by user {user_id}")
-        
+
+        # Save chat_id to send success message after restart
+        try:
+            with open(RESTART_FILE, 'w') as f:
+                json.dump({'chat_id': update.effective_chat.id}, f)
+        except Exception as e:
+            logger.error(f"Error saving restart info: {e}")
+
         # Schedule restart after a short delay to allow message to be sent
         async def delayed_restart():
             await asyncio.sleep(2)  # Give time for message to be sent
@@ -708,10 +718,10 @@ async def restart_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 subprocess.run(["sudo", "systemctl", "restart", service_name], check=True)
             except Exception as e:
                 logger.error(f"Error during delayed restart: {e}")
-        
+
         # Schedule the restart to happen after responding
         asyncio.create_task(delayed_restart())
-        
+
     except Exception as e:
         logger.error(f"Error in restart_command: {e}")
         await update.message.reply_text(
@@ -738,16 +748,37 @@ def signal_handler(sig, frame):
     
     sys.exit(0)
 
+async def send_restart_success_notification(application) -> None:
+    """Send notification if bot was restarted."""
+    try:
+        if os.path.exists(RESTART_FILE):
+            with open(RESTART_FILE, 'r') as f:
+                restart_info = json.load(f)
+
+            chat_id = restart_info.get('chat_id')
+            if chat_id:
+                await application.bot.send_message(
+                    chat_id=chat_id,
+                    text="✅ **Bot restarted successfully!**\n\nThe bot is now online and ready to process requests.",
+                    parse_mode='Markdown'
+                )
+                logger.info(f"Restart success notification sent to chat {chat_id}")
+
+            # Delete the restart file after sending notification
+            os.remove(RESTART_FILE)
+    except Exception as e:
+        logger.error(f"Error sending restart notification: {e}")
+
 def main() -> None:
     """Start the bot."""
     # Set up signal handlers for graceful shutdown
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
-    
+
     # Load user contexts from file
     global user_contexts
     user_contexts = load_user_contexts()
-    
+
     # Create the Application with optimized settings
     application = (Application.builder()
                   .token(os.getenv("TELEGRAM_BOT_TOKEN"))
@@ -767,6 +798,12 @@ def main() -> None:
     
     # Add message handler for all text messages (not commands)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    # Add post_init callback to send restart notification
+    async def post_init(application):
+        await send_restart_success_notification(application)
+
+    application.post_init = post_init
 
     try:
         # Run the bot until the user presses Ctrl-C
